@@ -1,0 +1,28 @@
+# README #
+
+Building the VDB770 app:
+--------------------------------------------------
+1. prereqs: clang 5, cmake 3, make
+2. building:  under src, create a directory called build
+    from the build directory, run cmake .. -DAARCH_TOOLCHAIN_DIR=<full path of linaro tool chain root>
+3. run make
+
+Building the Chicony repo.
+--------------------------------------------------
+1. clone this repo: https://bitbucket.corp.adcinternal.com/users/mabrown/repos/chicony-build-env/browse
+2. under repos, clone the chicony repo: https://bitbucket.org/Fran_Chung/alarm_vdb770_0419_512mb_20200305/src/master/
+3. from the root of the first repo, run build.sh
+4. run run.sh
+5. run make -j8 in the docker shell
+
+Chicony layout:
+--------------------------------------------------
+1. fw_version file: ambarella/boards/s5l_strawberry/
+2. location of the www and wifi binaries: ambarella/prebuild/third-party/armv8-a/Chicony/usr/bin/
+3. location of the old chicony app: ambarella/app/Chicony/CEC_Control_Center/
+4. location of the cgi app: ambarella/app/Chicony/CEC_CGI/
+5. location of the built flashable binary: ambarella/out/s5l_strawberry/images/bst_bld_pba_kernel_lnx_release.bin
+
+Build machine
+--------------------------------------------------
+ssh -l builder 172.28.98.23

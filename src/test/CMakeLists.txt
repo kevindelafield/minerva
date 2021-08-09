@@ -1,0 +1,51 @@
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
+
+FILE (GLOB APP_INCLUDE "*.h" openssl-1.1.1k-arm)
+FILE (GLOB APP_SRC "*.cpp")
+
+# might be able to remove ../include
+include_directories(../../thirdparty/curl-7.77.0-arm/include ../../thirdparty/openssl-1.1.1k-arm/include/ ../../thirdparty/oryx/include ../../thirdparty/oryx/include/utility ../../thirdparty/oryx/include/ipc ../../thirdparty/oryx/include/services ../../thirdparty/oryx/include/utility/drawing ../../thirdparty/oryx/include/video ../../thirdparty/oryx/include/vca ../../thirdparty/dependencies/arm/include ../../thirdparty/pugixml-arm/include ../../thirdparty/curl-7.77.0-arm/include ../../thirdparty/amba-arm/include)
+
+add_executable(test ${APP_SRC} ${APP_INCLUDE})
+
+target_link_libraries(test ovhttpd util ${UUID_LIBRARY})
+
+find_library(PUGIXML_LIBRARY NO_DEFAULT_PATH NAMES pugixml PATHS ../../thirdparty/pugixml-arm/lib)
+find_library(CURL_LIBRARY NO_DEFAULT_PATH NAMES curl PATHS ../../thirdparty/curl-7.77.0-arm/lib)
+find_library(UUID_LIBRARY NO_DEFAULT_PATH NAMES uuid PATHS ../../thirdparty/uuid-arm/lib )
+find_library(CURL_LIBRARY NO_DEFAULT_PATH NAMES curl PATHS ../../thirdparty/curl-7.77.0-arm/lib)
+find_library(CRYPTO_LIBRARY NO_DEFAULT_PATH NAMES crypto PATHS ../../thirdparty/openssl-1.1.1k-arm/lib)
+find_library(SSL_LIBRARY NO_DEFAULT_PATH NAMES ssl PATHS ../../thirdparty/openssl-1.1.1k-arm/lib)
+find_library(NGHTTP2_LIBRARY NO_DEFAULT_PATH NAMES nghttp2 PATHS ../../thirdparty/dependencies/arm/lib)
+find_library(IDN2_LIBRARY NO_DEFAULT_PATH NAMES idn2 PATHS ../../thirdparty/dependencies/arm/lib)
+find_library(SSH2_LIBRARY NO_DEFAULT_PATH NAMES ssh2 PATHS ../../thirdparty/dependencies/arm/lib)
+find_library(Z_LIBRARY NO_DEFAULT_PATH NAMES z PATHS ../../thirdparty/dependencies/arm/lib)
+find_library(UNISTRING_LIBRARY NO_DEFAULT_PATH NAMES unistring PATHS ../../thirdparty/dependencies/arm/lib)
+# ORYX STUFF
+find_library(AMVIDEO_LIBRARY NAMES amvideo PATHS ../../thirdparty/oryx/lib)
+find_library(AMUTIL_LIBRARY NAMES amutil PATHS ../../thirdparty/oryx/lib)
+find_library(AMOSAL_LIBRARY NAMES amosal PATHS ../../thirdparty/oryx/lib)
+find_library(AMIPC_LIBRARY NAMES amipc PATHS ../../thirdparty/oryx/lib)
+find_library(AMAPI_LIBRARY NAMES amapi PATHS ../../thirdparty/oryx/lib)
+find_library(AMMEDIA_DATA_STRUCT_LIBRARY NAMES ammedia-data-struct PATHS ../../thirdparty/oryx/lib)
+find_library(AMVIDEO_LIBRARY NAMES amvideo PATHS ../../thirdparty/oryx/lib)
+find_library(AMARCHIVE_LIBRARY NAMES amarchive PATHS ../../thirdparty/oryx/lib)
+find_library(AMVIDEO_PRIVATE_LIBRARY NAMES amvideo-private PATHS ../../thirdparty/oryx/lib)
+find_library(UNWIND_AARCH64_LIBRARY NO_DEFAULT_PATH NAMES unwind-aarch64 PATHS ../../thirdparty/oryx/lib)
+find_library(AMDEC7Z_LIBRARY NO_DEFAULT_PATH NAMES amdec7z PATHS ../../thirdparty/oryx/lib)
+find_library(ARCHIVE_LIBRARY NO_DEFAULT_PATH NAMES archive PATHS ../../thirdparty/oryx/lib)
+find_library(AMCONFIG_LIBRARY NO_DEFAULT_PATH NAMES amconfig PATHS ../../thirdparty/oryx/lib)
+find_library(AMVIDEO_PLATFORM_LIBRARY NAMES amvideo-platform PATHS ../../thirdparty/oryx/lib)
+find_library(UNWIND_LIBRARY NO_DEFAULT_PATH NAMES unwind PATHS ../../thirdparty/oryx/lib)
+find_library(LZMA_LIBRARY NO_DEFAULT_PATH NAMES lzma PATHS ../../thirdparty/oryx/lib)
+find_library(BZ2_LIBRARY NO_DEFAULT_PATH NAMES bz2 PATHS ../../thirdparty/oryx/lib)
+find_library(LUA_LIBRARY NO_DEFAULT_PATH NAMES lua PATHS ../../thirdparty/oryx/lib)
+find_library(JPEG_LIBRARY NO_DEFAULT_PATH NAMES jpeg PATHS ../../thirdparty/dependencies/arm/lib)
+find_library(TURBOJPEG_LIBRARY NO_DEFAULT_PATH NAMES turbojpeg PATHS ../../thirdparty/dependencies/arm/lib)
+# JSONCPP
+find_library(JSONCPP_LIBRARY NAMES jsoncpp)
+
+target_link_libraries(test pthread ${UUID_LIBRARY} ${CURL_LIBRARY} ${CRYPTO_LIBRARY} ${SSL_LIBRARY} ${NGHTTP2_LIBRARY} ${IDN2_LIBRARY} ${SSH2_LIBRARY} ${Z_LIBRARY} ${UNISTRING_LIBRARY} stdc++ ${AMVIDEO_LIBRARY} ${AMUTIL_LIBRARY} ${AMOSAL_LIBRARY} ${AMIPC_LIBRARY} ${AMAPI_LIBRARY} ${AMMEDIA_DATA_STRUCT_LIBRARY} ${AMVIDEO_LIBRARY} ${AMARCHIVE_LIBRARY} ${AMVIDEO_PRIVATE_LIBRARY} ${UNWIND_AARCH64_LIBRARY} ${AMDEC7Z_LIBRARY} ${ARCHIVE_LIBRARY} ${AMCONFIG_LIBRARY} ${AMVIDEO_PLATFORM_LIBRARY} ${UNWIND_LIBRARY} ${LZMA_LIBRARY} ${BZ2_LIBRARY} ${LUA_LIBRARY} ${JSONCPP_LIBRARY} ${TURBOJPEG_LIBRARY} ${JPEG_LIBRARY} ${PUGIXML_LIBRARY} ${CURL_LIBRARY})

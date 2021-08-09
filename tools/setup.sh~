@@ -1,0 +1,3 @@
+#!/bin/bash
+
+sudo apt install libpugixml1v5 -y

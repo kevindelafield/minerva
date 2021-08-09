@@ -1,0 +1,17 @@
+all:  epoll
+src = name_resolver.cpp epoll.cpp kernel3.cpp kernel2.cpp kernel1.cpp kernel.cpp settings.cpp kernel_stats.cpp hybrid_lock.cpp deque.cpp kernel_test.cpp
+obj = $(src:.cpp=.o)
+
+clean:
+	rm -f epoll *~ *.o
+
+export CLANG=tools/runclang.sh
+export CXX=~/linaro-aarch64-2017.08-gcc7.1/bin/aarch64-linux-gnu-g++
+export LDFLAGS=-lpthread -lcurl -lcrypto -lssl -lnghttp2 -lidn2 -lssh2 -lz -lunistring -lstdc++ -L ../../thirdparty/dependencies/arm/lib -L ../../thirdparty/curl-7.77.0-arm/lib -L ../../thirdparty/openssl-1.1.1k-arm/lib
+export CPPFLAGS=-g -std=c++17 -Werror -I ../../thirdparty/jsoncpp-arm/include -I ../../thirdparty/curl-7.77.0-arm/include -I ../../thirdparty/openssl-1.1.1k-arm/include/ -I ../include
+
+epoll: $(obj)
+	$(CXX) $(LDFLAGS) -o $@ $^ ../lib/aarch64/libovhttpd.a ../../thirdparty/jsoncpp-arm/lib/libjsoncpp.a
+
+test: test.o hybrid_lock.o log.o
+	$(CC) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)

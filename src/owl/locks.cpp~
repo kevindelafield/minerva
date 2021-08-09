@@ -1,0 +1,13 @@
+#include "locks.h"
+
+namespace ovhttpd
+{
+    std::shared_mutex shared_lock;
+    
+    std::mutex global_lock;
+    
+    std::mutex fd_lock;
+    
+    shared_file_lock boot_lock("/tmp/boot.lock", 
+                               O_CREAT | O_WRONLY | O_CLOEXEC, 0666);
+}

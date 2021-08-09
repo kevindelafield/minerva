@@ -1,0 +1,22 @@
+all:  epoll
+src = name_resolver.cpp epoll.cpp log.cpp connection.cpp kernel3.cpp kernel2.cpp kernel1.cpp kernel.cpp thread_pool.cpp kernel_visor.cpp settings.cpp scheduler.cpp httpd.cpp http_request.cpp http_response.cpp http_content_type.cpp auth.cpp time_utils.cpp controller.cpp base64.cpp kernel_stats.cpp hybrid_lock.cpp
+inc = name_resolver.h log.h connection.h kernel2.h kernel1.h kernel.h thread_pool.h kernel_visor.h settings.h scheduler.h 
+obj = $(src:.c=.o)
+
+
+clean:
+	rm -f epoll *~
+
+export CLANG=tools/runclang.sh
+#export CC=clang++-7
+export CC=clang
+#export CC=g++
+export LDFLAGS=-lpthread -lcurl -ljsoncpp -lstdc++
+export CPPFLAGS=-g -std=c++17 -Werror
+
+epoll: $(obj)
+#	$(CLANG) $^
+	$(CC) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+test: test.o hybrid_lock.o log.o
+	$(CC) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)

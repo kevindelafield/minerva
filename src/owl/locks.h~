@@ -1,0 +1,15 @@
+#pragma once
+
+#include <shared_mutex>
+#include "shared_file_lock.h"
+
+namespace ovhttpd
+{
+   extern std::shared_mutex shared_lock;
+
+   extern std::mutex global_lock;
+
+   extern std::mutex fd_lock;
+
+   extern shared_file_lock boot_lock;
+}

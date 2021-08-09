@@ -1,0 +1,27 @@
+# Never modify line endings of our libs
+*.a binary
+*.so binary
+*.so.* binary
+*.dll binary
+*.lib binary
+
+# Never modify line endings of binary images
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.avi binary
+gdb binary
+gdbserver binary
+
+# Never modify DL weights files etc.
+*.bin binary
+*.weights binary
+*.pb binary
+*.tflite binary
+*.caffemodel binary
+*.dat binary
+*.db binary
+*.exe binary
+*.yml.gz binary
+
+*.lib binary

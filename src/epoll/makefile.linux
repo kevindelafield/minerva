@@ -1,0 +1,22 @@
+all:  epoll
+src = name_resolver.cpp epoll.cpp kernel3.cpp kernel2.cpp kernel1.cpp kernel.cpp settings.cpp kernel_stats.cpp hybrid_lock.cpp deque.cpp kernel_test.cpp
+obj = $(src:.cpp=.o)
+
+clean:
+	rm -f epoll *~ *.o
+
+export CLANG=tools/runclang.sh
+export CXX=clang++-7
+#export CC=g++
+export LDFLAGS=-lpthread -lcurl -ljsoncpp -lcrypto 
+export CPPFLAGS=-g -std=c++17 -Werror -I../include
+
+epoll: $(obj)
+	$(CXX) $(LDFLAGS) -o $@ $^ ../ovhttpd/libovhttpd.a 
+
+test: test.o hybrid_lock.o log.o
+	$(CC) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+install: epoll
+	mkdir -p ../bin
+	cp epoll ../bin
