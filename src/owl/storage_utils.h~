@@ -1,8 +1,0 @@
-#pragma once
-
-#include <string>
-
-namespace ovhttpd
-{
-     long get_free_space(const std::string & path);
-}
