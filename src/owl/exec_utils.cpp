@@ -17,7 +17,6 @@
 #include <cstring>
 #include <cassert>
 #include "log.h"
-#include "locks.h"
 #include "exec_utils.h"
 #include "string_utils.h"
 
@@ -226,8 +225,6 @@ namespace owl
         
         // fork
         {
-            std::unique_lock<std::mutex> lk(fd_lock);
-
             if (pipe2(filedes, O_CLOEXEC))
             {
                 LOG_ERROR_ERRNO("failed to create pipe", errno);
@@ -392,8 +389,6 @@ namespace owl
         
         // fork
         {
-            std::unique_lock<std::mutex> lk(fd_lock);
-
             if (pipe2(filedes_in, O_CLOEXEC))
             {
                 LOG_ERROR_ERRNO("failed to create pipe", errno);
@@ -602,8 +597,6 @@ namespace owl
         
         // fork
         {
-            std::unique_lock<std::mutex> lk(fd_lock);
-
             if (pipe2(filedes, O_CLOEXEC))
             {
                 LOG_ERROR_ERRNO("failed to create pipe", errno);

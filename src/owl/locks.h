@@ -9,6 +9,4 @@ namespace owl
 
    extern std::mutex global_lock;
 
-   extern std::mutex fd_lock;
-
 }

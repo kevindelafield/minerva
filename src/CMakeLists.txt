@@ -60,4 +60,7 @@ add_subdirectory(owl)
 include_directories(www)
 add_subdirectory(www)
 
+include_directories(test)
+add_subdirectory(test)
+
 

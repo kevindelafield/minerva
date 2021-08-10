@@ -10,7 +10,6 @@
 #include <algorithm>
 #include "connection.h"
 #include "log.h"
-#include "locks.h"
 
 namespace owl
 {
@@ -29,8 +28,6 @@ namespace owl
         last_read(std::chrono::steady_clock::now()),
         last_write(std::chrono::steady_clock::now())
     {
-        std::unique_lock<std::mutex> lk(fd_lock);
-
         int s = ::socket(family, socktype, protocol);
         if (s == -1)
         {
@@ -243,8 +240,6 @@ namespace owl
 
     int connection::accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags)
     {
-        std::unique_lock<std::mutex> lk(fd_lock);
-
         last_err = 0;
         int s = ::accept4(socket, (struct sockaddr *)&addr, &addr_len,
             flags);
