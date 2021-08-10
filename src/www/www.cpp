@@ -11,8 +11,7 @@
 #include <owl/file_utils.h>
 #include <owl/json_utils.h>
 #include <owl/exec_utils.h>
-#include "kernel_stats.h"
-#include "kernel_default.h"
+#include "file_server.h"
 #include "settings.h"
 
 using namespace www;
@@ -149,28 +148,24 @@ int main(int argc, char** argv)
 
     kv().set_config(config);
 
-    // build kernels
+    // build compponents
     auto k1 = std::make_shared<owl::httpd>();
     assert(k1);
-    auto k2 = std::make_shared<kernel_stats>();
+    auto k2 = std::make_shared<file_server>();
     assert(k2);
-    auto k3 = std::make_shared<kernel_default>();
-    assert(k3);
     
-    // add kernels
+    // add components
     kv().add(k1);
     kv().add(k2);
-    kv().add(k3);
     
     k1 = nullptr;
     k2 = nullptr;
-    k3 = nullptr;
     
     LOG_INFO("starting...");
     
     kv().initialize();
     
-    // start kernels
+    // start visor
     kv().start();
     
     LOG_INFO("started");
@@ -181,7 +176,7 @@ int main(int argc, char** argv)
     signal(SIGUSR2, null_handler);
     signal(SIGHUP, hup_handler);
     
-    // wait for kernels to stop
+    // wait for components to stop
     kv().wait();
     
     kv().release();

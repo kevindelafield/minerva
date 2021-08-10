@@ -10,12 +10,12 @@
 #include <owl/string_utils.h>
 #include <owl/file_utils.h>
 #include <owl/log.h>
-#include "kernel_default.h"
+#include "file_server.h"
 
 namespace www
 {
 
-    void kernel_default::initialize()
+    void file_server::initialize()
     {
         auto svr = get_component<owl::httpd>(owl::httpd::NAME);
         if (svr)
@@ -40,7 +40,7 @@ namespace www
         require_authorization(false);
     }
 
-    bool kernel_default::auth_callback(const std::string & user,
+    bool file_server::auth_callback(const std::string & user,
                                        const std::string & op) 
     {
         Json::Value root;
@@ -54,7 +54,7 @@ namespace www
         return false;
     }
 
-    void kernel_default::handle_request(owl::http_context & ctx, const std::string & op)
+    void file_server::handle_request(owl::http_context & ctx, const std::string & op)
     {
         ctx.response().add_header("Pragma", "no-cache");
         ctx.response().add_header("Cache-Control", "no-cache");

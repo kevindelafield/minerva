@@ -1,5 +1,3 @@
-#pragma once
-
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -10,15 +8,13 @@
 namespace www
 {
 
-    class kernel_stats : public owl::component, owl::controller
+    class file_server : public owl::component, public owl::controller
     {
     public:
-        kernel_stats() = default;
-        virtual ~kernel_stats() = default;
+        file_server() = default;
+        virtual ~file_server() = default;
 
-        constexpr static char PATH[] = "stats";
-
-        constexpr static char NAME[] = "stats";
+        constexpr static char NAME[] = "www-default";
 
         std::string name() override
         {
@@ -31,5 +27,9 @@ namespace www
                            const std::string & op) override;
 
         void handle_request(owl::http_context & ctx, const std::string & op) override;
+
+    private:
+        std::string m_root_dir;
+        std::string m_default_file;
     };
 }
