@@ -198,8 +198,9 @@ namespace owl
         if (::listen(socket, backlog))
         {
             LOG_ERROR_ERRNO("listen failed", errno);
+            return false;
         }
-        return false;
+        return true;
     }
 
     bool connection::accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags, int & sock)
