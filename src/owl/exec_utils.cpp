@@ -196,24 +196,6 @@ namespace owl
         return WEXITSTATUS(status);
     }
 
-    static bool set_close_on_exec(int fd)
-    {
-        int flags = fcntl(fd, F_GETFD, 0);
-        if (flags == -1) {
-            LOG_ERROR_ERRNO("failed to get socket flags", errno);
-            return false;
-        }
- 
-        flags |= FD_CLOEXEC;
-
-        if (fcntl(fd, F_SETFD, flags) == -1) {
-            LOG_ERROR_ERRNO("failed to set socket flags", errno);
-            return false;
-        }    
-
-        return true;
-    }
-
     bool execl::start(int & bgid, bool nohup)
     {
         bgid = -1;
@@ -331,22 +313,6 @@ namespace owl
             {
                 LOG_ERROR_ERRNO("failed to close file descriptor", errno);
             }
-
-            // set close on exec for open fd's
-            if (!set_close_on_exec(filedes[0]))
-            {
-                LOG_ERROR("failed to set close on exec on fd: " << filedes[0]);
-            }
-            if (!set_close_on_exec(filedes_err[0]))
-            {
-                LOG_ERROR("failed to set close on exec on fd: " << 
-                          filedes_err[0]);
-            }
-            if (!set_close_on_exec(filedes_in[1]))
-            {
-                LOG_ERROR("failed to set close on exec on fd: " << 
-                          filedes_in[1]);
-            }
         }
 
         // open stdout from child process
@@ -445,13 +411,6 @@ namespace owl
             if (::close(filedes_in[0]))
             {
                 LOG_ERROR_ERRNO("failed to close file descriptor", errno);
-            }
-
-            // set close on exec for open fd's
-            if (!set_close_on_exec(filedes_in[1]))
-            {
-                LOG_ERROR("failed to set close on exec on fd: " << 
-                          filedes_in[1]);
             }
         }
 
@@ -702,22 +661,6 @@ namespace owl
             if (::close(filedes_in[0]))
             {
                 LOG_ERROR_ERRNO("failed to close file descriptor", errno);
-            }
-
-            // set close on exec for open fd's
-            if (!set_close_on_exec(filedes[0]))
-            {
-                LOG_ERROR("failed to set close on exec on fd: " << filedes[0]);
-            }
-            if (!set_close_on_exec(filedes_err[0]))
-            {
-                LOG_ERROR("failed to set close on exec on fd: " << 
-                          filedes_err[0]);
-            }
-            if (!set_close_on_exec(filedes_in[1]))
-            {
-                LOG_ERROR("failed to set close on exec on fd: " << 
-                          filedes_in[1]);
             }
         }
 

@@ -94,30 +94,30 @@ namespace owl
         LOG_INFO("start listening on http: " << http_port_number);
         LOG_INFO("start listening on https: " << https_port_number);
 
-        if (http_listener->reuse_addr(true))
+        if (!http_listener->reuse_addr(true))
         {
-            FATAL("Failed to reuse address");
+            FATAL_ERRNO("Failed to reuse address", errno);
         }
-        if (http_listener->bind(http_port_number))
+        if (!http_listener->bind(http_port_number))
         {
-            FATAL("Failed to bind to port");
+            FATAL_ERRNO("Failed to bind to port", errno);
         }
-        if (http_listener->listen(max_queued_connections))
+        if (!http_listener->listen(max_queued_connections))
         {
-            FATAL("Listen failed");
+            FATAL_ERRNO("Listen failed", errno);
         }
 
-        if (https_listener->reuse_addr(true))
+        if (!https_listener->reuse_addr(true))
         {
-            FATAL("Failed to reuse address");
+            FATAL_ERRNO("Failed to reuse address", errno);
         }
-        if (https_listener->bind(https_port_number))
+        if (!https_listener->bind(https_port_number))
         {
-            FATAL("Failed to bind to port");
+            FATAL_ERRNO("Failed to bind to port", errno);
         }
-        if (https_listener->listen(max_queued_connections))
+        if (!https_listener->listen(max_queued_connections))
         {
-            FATAL("Listen failed");
+            FATAL_ERRNO("Listen failed", errno);
         }
 
         LOG_DEBUG("Httpd listening on socket " << http_port_number);
@@ -260,8 +260,7 @@ namespace owl
             }
             if (err < 0)
             {
-                LOG_DEBUG_ERRNO("poll during terminate failed",
-                                conn->get_last_error());
+                LOG_DEBUG_ERRNO("poll during terminate failed", errno);
                 return false;
             }
         }
@@ -429,17 +428,17 @@ namespace owl
 
             LOG_INFO("start listening on http: " << http_port_number);
 
-            if (http_listener->reuse_addr(true))
+            if (!http_listener->reuse_addr(true))
             {
-                FATAL("Failed to reuse address");
+                FATAL_ERRNO("Failed to reuse address", errno);
             }
-            if (http_listener->bind(http_port_number))
+            if (!http_listener->bind(http_port_number))
             {
-                FATAL("Failed to bind to port");
+                FATAL_ERRNO("Failed to bind to port", errno);
             }
-            if (http_listener->listen(max_queued_connections))
+            if (!http_listener->listen(max_queued_connections))
             {
-                FATAL("Listen failed");
+                FATAL_ERRNO("Listen failed", errno);
             }
             
             cond.notify_all();
@@ -472,17 +471,17 @@ namespace owl
 
             LOG_INFO("start listening on https: " << https_port_number);
 
-            if (https_listener->reuse_addr(true))
+            if (!https_listener->reuse_addr(true))
             {
-                FATAL("Failed to reuse address");
+                FATAL_ERRNO("Failed to reuse address", errno);
             }
-            if (https_listener->bind(https_port_number))
+            if (!https_listener->bind(https_port_number))
             {
-                FATAL("Failed to bind to port");
+                FATAL_ERRNO("Failed to bind to port", errno);
             }
-            if (https_listener->listen(max_queued_connections))
+            if (!https_listener->listen(max_queued_connections))
             {
-                FATAL("Listen failed");
+                FATAL_ERRNO("Listen failed", errno);
             }
             
             cond.notify_all();
@@ -548,19 +547,18 @@ namespace owl
                 struct sockaddr_in addr;
                 socklen_t addr_len = sizeof(addr);
 
-                int s = listener->accept(addr, addr_len, 
-                                         SOCK_CLOEXEC | SOCK_NONBLOCK);
-                if (s < 0)
+                int s;
+                if (!listener->accept(addr, addr_len, 
+                                      SOCK_CLOEXEC | SOCK_NONBLOCK, s))
                 {
-                    int err = listener->get_last_error();
-                    if (err == EAGAIN)
+                    if (errno == EAGAIN)
                     {
                         LOG_DEBUG("Accept EAGAIN");
                         continue;
                     }
                     else
                     {
-                        LOG_DEBUG_ERRNO("Accept error", listener->get_last_error()); 
+                        LOG_DEBUG_ERRNO("Accept error", errno);
                         std::this_thread::sleep_for(std::chrono::seconds(2));
                         continue;
                     }
@@ -619,8 +617,7 @@ namespace owl
             }
             case connection::CONNECTION_STATUS::CONNECTION_ERROR:
             {
-                LOG_DEBUG_ERRNO("error during tls negotiation",
-                                conn->get_last_error());
+                LOG_DEBUG("error during tls negotiation");
                 done = true;
                 break;
             }
@@ -793,7 +790,7 @@ namespace owl
 
             if (poll_status < 0)
             {
-                LOG_WARN_ERRNO("Poll error", conn->get_last_error());
+                LOG_WARN_ERRNO("Poll error", errno);
                 abrt = true;
                 break;
             }
@@ -822,7 +819,7 @@ namespace owl
                 {
                     abrt = true;
                     LOG_WARN_ERRNO("Http client timeout or socket read error",
-                                    conn->get_last_error());
+                                   errno);
                 }
                 break;
                 case connection::CONNECTION_CLOSED:

@@ -14,10 +14,10 @@ namespace owl
         struct sockaddr_in out_addr;
         socklen_t out_addr_len = sizeof(out_addr);
         memset(&out_addr, 0, sizeof(out_addr));
-        if (_conn->get_local_addr(m_client_addr, m_client_addr_len, 
-                                  out_addr, out_addr_len))
+        if (!_conn->get_local_addr(m_client_addr, m_client_addr_len, 
+                                   out_addr, out_addr_len))
         {
-            LOG_ERROR("failed to get remote address of socket");
+            LOG_ERROR_ERRNO("failed to get remote address of socket", errno);
             return false;
         }
 

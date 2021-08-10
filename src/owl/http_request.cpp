@@ -745,7 +745,7 @@ namespace owl
             _ctx->conn()->poll(read_flag, write_flag, error_flag, 0);
         if (poll_status < 0)
         {
-            LOG_WARN_ERRNO("Poll error", _ctx->conn()->get_last_error());
+            LOG_WARN_ERRNO("Poll error", errno);
             throw http_exception("poll error");
         }
         else if (poll_status == 0)
@@ -1247,7 +1247,7 @@ namespace owl
                     _ctx->conn()->poll(read_flag, write_flag, error_flag, 100);
                 if (poll_status < 0)
                 {
-                    LOG_WARN_ERRNO("Poll error", _ctx->conn()->get_last_error());
+                    LOG_WARN_ERRNO("Poll error", errno);
                     throw http_exception("poll error");
                 }
                 else if (poll_status == 0)
@@ -1277,7 +1277,7 @@ namespace owl
             case connection::CONNECTION_ERROR:
             {
                 LOG_DEBUG_ERRNO("Http client timeout or socket read error",
-                               _ctx->conn()->get_last_error());
+                                errno);
                 throw http_exception("read error");
             }
             break;
@@ -1311,7 +1311,7 @@ namespace owl
             }
             break;
             default:
-                FATAL("Unknown connection state: " << _ctx->conn()->get_read_status());
+                FATAL("Unknown connection state: " << errno);
                 break;
             }
         }

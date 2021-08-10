@@ -21,10 +21,6 @@ namespace owl
     std::atomic<unsigned long long> connection::socket_counter;
 
     connection::connection(int family, int socktype, int protocol) :
-        last_err(0),
-        read_status(CONNECTION_WANTS_READ),
-        write_status(CONNECTION_OK),
-        accept_status(CONNECTION_OK),
         last_read(std::chrono::steady_clock::now()),
         last_write(std::chrono::steady_clock::now())
     {
@@ -36,18 +32,13 @@ namespace owl
         socket = s;
         open_counter++;
         socket_counter++;
-        set_close_on_exec(true);
     }
 
     connection::connection(int socket) :
-        socket(socket), last_err(0),
-        read_status(CONNECTION_WANTS_READ),
-        write_status(CONNECTION_OK),
-        accept_status(CONNECTION_OK)
+        socket(socket)
     {
         open_counter++;
         socket_counter++;
-        set_close_on_exec(true);
     }
 
     connection::~connection()
@@ -80,7 +71,6 @@ namespace owl
 
         char buf;
 
-        last_err = 0;
         ssize_t r = recv(socket, &buf, 1, MSG_PEEK);
         if (r < 0)
         {
@@ -95,30 +85,27 @@ namespace owl
         
     }
 
-    int connection::get_local_addr(const struct sockaddr_in & client_addr, 
-                                   socklen_t &client_addr_len,
-                                   struct sockaddr_in & addr,
-                                   socklen_t & addr_len)
+    bool connection::get_local_addr(const struct sockaddr_in & client_addr, 
+                                    socklen_t &client_addr_len,
+                                    struct sockaddr_in & addr,
+                                    socklen_t & addr_len)
     {
         int status = ::getsockname(socket, (struct sockaddr *)&addr, &addr_len);
         if (status)
         {
             LOG_ERROR_ERRNO("failed to get socket name", errno);
-            last_err = errno;
-            return status;
+            return false;
         }
 
-        return 0;
+        return true;
     }
 
-    int connection::set_close_on_exec(bool close)
+    bool connection::set_close_on_exec(bool close)
     {
-        last_err = 0;
         int flags = fcntl(socket, F_GETFD, 0);
         if (flags == -1) {
-            last_err = errno;
             LOG_ERROR_ERRNO("failed to get socket flags", errno);
-            return errno;
+            return false;
         }
  
         if (close)
@@ -131,26 +118,20 @@ namespace owl
         }
 
         if (fcntl(socket, F_SETFD, flags) == -1) {
-            last_err = errno;
             LOG_ERROR_ERRNO("failed to set socket flags", errno);
-            return errno;
+            return false;
         }    
 
-        return 0;
+        return true;
     }
 
-    int connection::set_blocking()
+    bool connection::set_blocking()
     {
-        int er = 0;
-        last_err = 0;
-    
         int flags = fcntl(socket, F_GETFL, 0);
         if (flags < 0)
         {
-            er = errno;
-            last_err = errno;
-            LOG_ERROR_ERRNO("fcntl failed", er);
-            return er;
+            LOG_ERROR_ERRNO("fcntl failed", errno);
+            return false;
         }
 
         flags &= ~O_NONBLOCK;
@@ -158,25 +139,19 @@ namespace owl
         flags = fcntl(socket, F_SETFL, flags) != -1;
         if (flags < 0)
         {
-            er = errno;
-            last_err = errno;
-            LOG_ERROR_ERRNO("fcntl failed", er);
+            LOG_ERROR_ERRNO("fcntl failed", errno);
+            return false;
         }
-        return er;
+        return true;
     }
 
-    int connection::set_nonblocking()
+    bool connection::set_nonblocking()
     {
-        int er = 0;
-        last_err = 0;
-    
         int flags = fcntl(socket, F_GETFL, 0);
         if (flags < 0)
         {
-            er = errno;
-            last_err = errno;
-            LOG_ERROR_ERRNO("fcntl failed", er);
-            return er;
+            LOG_ERROR_ERRNO("fcntl failed", errno);
+            return false;
         }
 
         flags |= O_NONBLOCK;
@@ -184,28 +159,24 @@ namespace owl
         flags = fcntl(socket, F_SETFL, flags) != -1;
         if (flags < 0)
         {
-            er = errno;
-            last_err = errno;
-            LOG_ERROR_ERRNO("fcntl failed", er);
+            LOG_ERROR_ERRNO("fcntl failed", errno);
+            return false;
         }
-        return er;
+        return true;
     }
 
-    int connection::reuse_addr(bool reuse)
+    bool connection::reuse_addr(bool reuse)
     {
         int enable = reuse;
-        int er = 0;
-        last_err = 0;
         if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
         {
-            er = errno;
-            last_err = errno;
-            LOG_ERROR_ERRNO("setsockopt failed", er);
+            LOG_ERROR_ERRNO("setsockopt failed", errno);
+            return false;
         }
-        return er;
+        return true;
     }
 
-    int connection::bind(int port)
+    bool connection::bind(int port)
     {
         // bind
         struct sockaddr_in addr;
@@ -214,67 +185,52 @@ namespace owl
         addr.sin_addr.s_addr = INADDR_ANY;
         addr.sin_port = htons(port);
     
-        int er = 0;
-        last_err = 0;
         if (::bind(socket, (struct sockaddr *)&addr, sizeof(addr)))
         {
-            er = errno;
-            last_err = errno;
-            LOG_ERROR_ERRNO("bind failed", er);
+            LOG_ERROR_ERRNO("bind failed", errno);
+            return false;
         }
-        return er;
+        return true;
     }
 
-    int connection::listen(int backlog)
+    bool connection::listen(int backlog)
     {
-        int er = 0;
-        last_err = 0;
         if (::listen(socket, backlog))
         {
-            er = errno;
-            last_err = errno;
-            LOG_ERROR_ERRNO("listen failed", er);
+            LOG_ERROR_ERRNO("listen failed", errno);
         }
-        return er;
+        return false;
     }
 
-    int connection::accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags)
+    bool connection::accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags, int & sock)
     {
-        last_err = 0;
         int s = ::accept4(socket, (struct sockaddr *)&addr, &addr_len,
             flags);
         if (s < 0)
         {
-            int er = errno;
-            last_err = er;
-            if (er != EAGAIN)
+            if (errno != EAGAIN)
             {
-                LOG_ERROR_ERRNO("accept failed", er);
+                LOG_ERROR_ERRNO("accept failed", errno);
             }
+            return false;
         }
-        else
-        {
-            set_close_on_exec(true);
-        }
-        return s;
+        sock = s;
+        return true;
     }
 
-    int connection::connect(const struct sockaddr * addr,
+    bool connection::connect(const struct sockaddr * addr,
                             const socklen_t addr_len)
     {
-        int er = 0;
-        last_err = 0;
         int status = ::connect(socket, addr, addr_len);
         if (status)
         {
-            er = errno;
-            last_err = er;
-            if (er != EINPROGRESS && er != EISCONN)
+            if (errno != EINPROGRESS && errno != EISCONN)
             {
-                LOG_ERROR_ERRNO("connect failed", er);
+                LOG_ERROR_ERRNO("connect failed", errno);
             }
+            return false;
         }
-        return er;
+        return true;
     }
 
     int connection::poll(std::vector<shared_poll_fd> & fds, int timeoutMs,
@@ -334,8 +290,6 @@ namespace owl
 
     int connection::poll(bool & read, bool & write, bool & error, int timeoutMs)
     {
-        last_err = 0;
-
         struct pollfd ps;
     
         std::memset(&ps, 0, sizeof(ps));
@@ -361,11 +315,9 @@ namespace owl
         int status = ::poll(&ps, 1, timeoutMs);
         if (status < 0)
         {
-            int er = errno;
-            last_err = er;
-            if (er != EINTR)
+            if (errno != EINTR)
             {
-                LOG_ERROR_ERRNO("Poll failed", er);
+                LOG_ERROR_ERRNO("Poll failed", errno);
             }
             return status;
         }
@@ -380,7 +332,6 @@ namespace owl
     connection::CONNECTION_STATUS connection::read(char* buf, size_t length,
                                                    ssize_t & read)
     {
-        last_err = 0;
         ssize_t r = recv(socket, buf, length, 0);
         // would block
         if (r < 0)
@@ -388,15 +339,12 @@ namespace owl
             read = 0;
             if (errno == EAGAIN)
             {
-                read_status = CONNECTION_WANTS_READ;
-                return read_status;
+                return CONNECTION_WANTS_READ;
             }
             else
             {
-                last_err = errno;
-                LOG_DEBUG_ERRNO("recv error on fd " << socket, last_err);
-                read_status = CONNECTION_ERROR;
-                return read_status;
+                LOG_DEBUG_ERRNO("recv error on fd " << socket, errno);
+                return CONNECTION_ERROR;
             }
         }
         read = r;
@@ -406,15 +354,12 @@ namespace owl
         // incr counter
         read_counter += r;
 
-        read_status = CONNECTION_OK;
-
-        return read_status;
+        return CONNECTION_OK;
     }
 
     connection::CONNECTION_STATUS connection::write(const char* buf, size_t length,
                                                     ssize_t & written)
     {
-        last_err = 0;
         ssize_t w = send(socket, buf, length, 0);
         if (w < 0)
         {
@@ -422,23 +367,18 @@ namespace owl
             // would block
             if (errno == EAGAIN)
             {
-                write_status = CONNECTION_WANTS_WRITE;
-                return write_status;
+                return CONNECTION_WANTS_WRITE;
             }
             // connection closed
             else if (errno == EPIPE)
             {
-                last_err = errno;
-                write_status = CONNECTION_CLOSED;
-                return write_status;
+                return CONNECTION_CLOSED;
             }
             // socket error
             else
             {
-                last_err = errno;
-                LOG_DEBUG_ERRNO("send error on fd " << socket, last_err);
-                write_status = CONNECTION_ERROR;
-                return write_status;
+                LOG_DEBUG_ERRNO("send error on fd " << socket, errno);
+                return CONNECTION_ERROR;
             }
         }
 
@@ -449,21 +389,6 @@ namespace owl
         // incr counter
         write_counter += w;
 
-        // connection closed?
-        if (w == 0)
-        {
-            write_status = CONNECTION_CLOSED;
-        }
-        // partial write
-        else if (w < length)
-        {
-            write_status = CONNECTION_OK;
-        }
-        // full write
-        else
-        {
-            write_status = CONNECTION_OK;
-        }
-        return write_status;
+        return CONNECTION_OK;
     }
 }

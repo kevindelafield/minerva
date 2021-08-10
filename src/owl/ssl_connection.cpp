@@ -55,12 +55,12 @@ namespace owl
             {
             case SSL_ERROR_WANT_READ:
             {
-                accept_status = CONNECTION_STATUS::CONNECTION_WANTS_READ;
+                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
             }
             break;
             case SSL_ERROR_WANT_WRITE:
             {
-                accept_status = CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
+                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
             }
             break;
             case SSL_ERROR_SYSCALL:
@@ -69,34 +69,28 @@ namespace owl
 
                 if (status == 0)
                 {
-                    accept_status = CONNECTION_STATUS::CONNECTION_CLOSED;
+                    return CONNECTION_STATUS::CONNECTION_CLOSED;
                 }
                 else if (status == -1)
                 {
-                    last_err = errno;
-                    accept_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_ERROR;
                 }
                 else
                 {
-                    last_err = EIO;
-                    accept_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_ERROR;
                 }
             }
             break;
             default:
             {
                 log_ssl_errors();
-                last_err = EIO;
-                accept_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                return CONNECTION_STATUS::CONNECTION_ERROR;
             }
             break;
             }
         }
-        else
-        {
-            accept_status = CONNECTION_STATUS::CONNECTION_OK;
-        }
-        return accept_status;
+
+        return CONNECTION_STATUS::CONNECTION_OK;
     }
 
     void ssl_connection::init(const char * cert_file,
@@ -143,12 +137,12 @@ namespace owl
             {
             case SSL_ERROR_WANT_READ:
             {
-                accept_status = CONNECTION_STATUS::CONNECTION_WANTS_READ;
+                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
             }
             break;
             case SSL_ERROR_WANT_WRITE:
             {
-                accept_status = CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
+                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
             }
             break;
             case SSL_ERROR_SYSCALL:
@@ -157,56 +151,50 @@ namespace owl
 
                 if (status == 0)
                 {
-                    accept_status = CONNECTION_STATUS::CONNECTION_CLOSED;
+                    return CONNECTION_STATUS::CONNECTION_CLOSED;
                 }
                 else if (status == -1)
                 {
-                    last_err = errno;
-                    accept_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_ERROR;
                 }
                 else
                 {
-                    last_err = EIO;
-                    accept_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_ERROR;
                 }
             }
             break;
             default:
             {
                 log_ssl_errors();
-                last_err = EIO;
-                accept_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                return CONNECTION_STATUS::CONNECTION_ERROR;
             }
             break;
             }
         }
-        else
+
+        int version = SSL_version(m_ssl);
+        std::string tlsv;
+        switch (version)
         {
-            accept_status = CONNECTION_STATUS::CONNECTION_OK;
-            int version = SSL_version(m_ssl);
-            std::string tlsv;
-            switch (version)
-            {
-            case TLS1_VERSION:
-                tlsv = "TLS1.0";
-                break;
-            case TLS1_1_VERSION:
-                tlsv = "TLS1.1";
-                break;
-            case TLS1_2_VERSION:
-                tlsv = "TLS1.2";
-                break;
-            case TLS1_3_VERSION:
-                tlsv = "TLS1.3";
-                break;
-            default:
-                tlsv = "TLS version unknown";
-                break;
-            }
-            LOG_INFO("accept with cipher: " << SSL_get_cipher_list(m_ssl, 0) <<
-                     " " << tlsv);
+        case TLS1_VERSION:
+            tlsv = "TLS1.0";
+            break;
+        case TLS1_1_VERSION:
+            tlsv = "TLS1.1";
+            break;
+        case TLS1_2_VERSION:
+            tlsv = "TLS1.2";
+            break;
+        case TLS1_3_VERSION:
+            tlsv = "TLS1.3";
+            break;
+        default:
+            tlsv = "TLS version unknown";
+            break;
         }
-        return accept_status;
+        LOG_INFO("accept with cipher: " << SSL_get_cipher_list(m_ssl, 0) <<
+                 " " << tlsv);
+        return CONNECTION_STATUS::CONNECTION_OK;
     }
 
     connection::CONNECTION_STATUS ssl_connection::read(char* buf,
@@ -222,12 +210,12 @@ namespace owl
             {
             case SSL_ERROR_WANT_READ:
             {
-                read_status = CONNECTION_STATUS::CONNECTION_WANTS_READ;
+                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
             }
             break;
             case SSL_ERROR_WANT_WRITE:
             {
-                read_status = CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
+                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
             }
             break;
             case SSL_ERROR_SYSCALL:
@@ -236,19 +224,17 @@ namespace owl
 
                 if (status == 0)
                 {
-                    read_status = CONNECTION_STATUS::CONNECTION_CLOSED;
+                    return CONNECTION_STATUS::CONNECTION_CLOSED;
                 }
                 else if (status == -1)
                 {
                     LOG_ERROR_ERRNO("ssl syscall error: ", errno);
-                    last_err = errno;
-                    read_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_ERROR;
                 }
                 else
                 {
                     LOG_ERROR("ssl error");
-                    last_err = EIO;
-                    read_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_ERROR;
                 }
             }
             break;
@@ -256,20 +242,16 @@ namespace owl
             {
                 log_ssl_errors();
                 LOG_ERROR("ssl unknown error");
-                last_err = EIO;
-                read_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                return CONNECTION_STATUS::CONNECTION_ERROR;
             }
             break;
             }
         }
-        else
-        {
-            read = status;
-            read_counter += read;
-            read_status = CONNECTION_STATUS::CONNECTION_OK;
-        }
+
+        read = status;
+        read_counter += read;
         last_read = std::chrono::steady_clock::now();
-        return read_status;
+        return CONNECTION_STATUS::CONNECTION_OK;
     }
 
     connection::CONNECTION_STATUS ssl_connection::write(const char* buf,
@@ -285,12 +267,12 @@ namespace owl
             {
             case SSL_ERROR_WANT_READ:
             {
-                write_status = CONNECTION_STATUS::CONNECTION_WANTS_READ;
+                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
             }
             break;
             case SSL_ERROR_WANT_WRITE:
             {
-                write_status = CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
+                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
             }
             break;
             case SSL_ERROR_SYSCALL:
@@ -299,37 +281,27 @@ namespace owl
 
                 if (status == 0)
                 {
-                    write_status = CONNECTION_STATUS::CONNECTION_CLOSED;
-                }
-                else if (status == -1)
-                {
-                    last_err = errno;
-                    write_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_CLOSED;
                 }
                 else
                 {
-                    last_err = EIO;
-                    write_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                    return CONNECTION_STATUS::CONNECTION_ERROR;
                 }
             }
             break;
             default:
             {
                 log_ssl_errors();
-                last_err = EIO;
-                write_status = CONNECTION_STATUS::CONNECTION_ERROR;
+                return CONNECTION_STATUS::CONNECTION_ERROR;
             }
             break;
             }
         }
-        else
-        {
-            written = status;
-            write_counter += written;
-            write_status = CONNECTION_STATUS::CONNECTION_OK;
-        }
+
+        written = status;
+        write_counter += written;
         last_write = std::chrono::steady_clock::now();
-        return write_status;
+        return CONNECTION_STATUS::CONNECTION_OK;
     }
 }
 

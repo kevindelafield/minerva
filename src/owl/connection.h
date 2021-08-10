@@ -28,10 +28,6 @@ namespace owl
 
     protected:
         int socket;
-        int last_err;
-        CONNECTION_STATUS accept_status;
-        CONNECTION_STATUS read_status;
-        CONNECTION_STATUS write_status;
 
     public:
         connection(int socket);
@@ -74,20 +70,21 @@ namespace owl
             bool error;
         };
 
-        int get_local_addr(const struct sockaddr_in & addr, 
+        bool get_local_addr(const struct sockaddr_in & addr, 
                            socklen_t &addr_len,
                            struct sockaddr_in & out_addr,
                            socklen_t & out_addr_len);
 
-        int set_close_on_exec(bool close);
+        bool set_close_on_exec(bool close);
 
-        int reuse_addr(bool reuse);
+        bool reuse_addr(bool reuse);
 
-        int bind(int port);
+        bool bind(int port);
 
-        int listen(int backlog);
+        bool listen(int backlog);
     
-        int accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags);
+        bool accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags,
+                    int & s);
 
         bool data_available(bool & available);
 
@@ -96,12 +93,12 @@ namespace owl
             return CONNECTION_OK;
         }
 
-        int set_blocking();
+        bool set_blocking();
     
-        int set_nonblocking();
+        bool set_nonblocking();
     
-        virtual int connect(const struct sockaddr * addr,
-                            const socklen_t addr_len);
+        virtual bool connect(const struct sockaddr * addr,
+                             const socklen_t addr_len);
 
         int poll(bool & read, bool & write, bool & error, int timeoutMs);
 
@@ -112,48 +109,33 @@ namespace owl
             return CONNECTION_OK;
         }
 
-        inline int shutdown_write()
+        inline bool shutdown_write()
         {
             LOG_DEBUG("shutdown write: " << socket);
-            write_status = CONNECTION_CLOSED;
             int status = ::shutdown(socket, SHUT_WR);
             if (status && errno != ENOTCONN)
             {
                 LOG_DEBUG_ERRNO("shutdown write failed: " << socket, errno);
+                return false;
             }
-            return status;
+            return true;
         }
 
-        inline int shutdown_read()
+        inline bool shutdown_read()
         {
             LOG_DEBUG("shutdown read: " << socket);
-            read_status = CONNECTION_CLOSED;
             int status = ::shutdown(socket, SHUT_RD);
             if (status && errno != ENOTCONN)
             {
                 LOG_DEBUG_ERRNO("shutdown read failed: " << socket, errno);
+                return false;
             }
-            return status;
+            return true;
         }
 
         inline int get_socket() const
         {
             return socket;
-        }
-
-        inline int get_last_error() const
-        {
-            return last_err;
-        }
-
-        inline CONNECTION_STATUS get_read_status() const
-        {
-            return read_status;
-        }
-
-        inline CONNECTION_STATUS get_write_status() const
-        {
-            return write_status;
         }
     };
 }

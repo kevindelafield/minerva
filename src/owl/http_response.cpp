@@ -87,8 +87,7 @@ namespace owl
 
                 if (poll_status < 0)
                 {
-                    LOG_WARN_ERRNO("Poll error", 
-                                   _ctx->conn()->get_last_error());
+                    LOG_WARN_ERRNO("Poll error", errno);
                     return false;
                 }
                 else if (poll_status == 0)
@@ -108,13 +107,7 @@ namespace owl
                 case connection::CONNECTION_ERROR:
                 {
                     LOG_DEBUG_ERRNO("Http client timeout or socketwrite error",
-                                   _ctx->conn()->get_last_error());
-                    return false;
-                }
-                break;
-                case connection::CONNECTION_CLOSED:
-                {
-                    LOG_DEBUG("Http client disconnected unexpectedly");
+                                    errno);
                     return false;
                 }
                 break;
