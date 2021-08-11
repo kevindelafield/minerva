@@ -8,6 +8,7 @@
 #include <atomic>
 #include <ostream>
 #include <deque>
+#include <unordered_set>
 #include "component.h"
 #include "http_request.h"
 #include "http_response.h"
@@ -26,6 +27,13 @@ namespace owl
     class httpd : public component
     {
     public:
+
+        enum PROTOCOL
+        {
+            HTTP,
+            HTTPS
+        };
+
         httpd();
         virtual ~httpd() = default;
         
@@ -51,6 +59,10 @@ namespace owl
     
         Json::Value get_stats() override;
     
+        void clear_listeners();
+
+        void add_listener(PROTOCOL protocol, int port);
+
         void register_controller(const std::string & path, 
                                  controller * controller);
 
@@ -68,20 +80,6 @@ namespace owl
             return m_realm;
         }
 
-        int http_port() const
-        {
-            return http_port_number;
-        }
-
-        int https_port() const
-        {
-            return https_port_number;
-        }
-
-        bool update_http_port(int port);
-
-        bool update_https_port(int port);
-
         void auth_db(http_auth_db * db)
         {
             m_auth_db = db;
@@ -90,31 +88,63 @@ namespace owl
         void get_cgi_log(std::ostream & db);
 
     private:
+        class http_listener
+        {
+        public:
+            http_listener()
+            {
+            }
+
+            http_listener(int p, PROTOCOL proto) : port(p), protocol(proto)
+            {
+            }
+
+            http_listener(const http_listener & other)
+            {
+                protocol = other.protocol;
+                port = other.port;
+                conn = other.conn;
+            }
+
+            http_listener & operator=(const http_listener & other)
+            {
+                if (&other != this)
+                {
+                    protocol = other.protocol;
+                    port = other.port;
+                    conn = other.conn;
+                }
+                return *this;
+            }
+
+            PROTOCOL protocol = PROTOCOL::HTTP;
+            int port = 80;
+            std::shared_ptr<connection> conn;
+        };
+
+        void start_listeners();
+
         std::shared_ptr<thread_pool> handler_thread_pool;
         std::unordered_map<std::string, controller*> controller_map;
         controller* m_default_controller = nullptr;
         std::string m_realm;
-        int m_new_http_port = -1;
-        int m_new_https_port = -1;
-        int http_port_number = 80;
-        int https_port_number = 443;
         std::atomic<unsigned long long> m_active_count;
         std::atomic<unsigned long long> m_request_count;
         http_auth_db * m_auth_db = nullptr;
 
+        std::vector<http_listener> m_listeners;
+        std::map<int, http_listener> m_listener_sockets;
+        std::mutex m_listener_lock;
+        std::condition_variable m_listener_cond;
+        volatile bool m_hup = false;
+        volatile bool m_waiting_hup = false;
+
         std::mutex m_log_lock;
         std::deque<std::string> m_cgi_log;
-    
-        std::shared_ptr<connection> http_listener;
-        std::shared_ptr<connection> https_listener;
     
         std::map<int, std::tuple<std::shared_ptr<connection>, struct sockaddr_in, socklen_t>> m_socket_map;
 
         void log(http_context & ctx, const std::string & date);
-
-        void handle_http_port_update();
-        
-        void handle_https_port_update();
 
         bool accept(std::shared_ptr<connection> conn);
         

@@ -1,9 +1,11 @@
 #include <sys/types.h>
+
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <signal.h>
 #include <cassert>
+#include <mutex>
 #include <owl/log.h>
 #include <owl/component_visor.h>
 #include <owl/httpd.h>
@@ -24,6 +26,8 @@ owl::component_visor & kv()
 
 static volatile bool stopped = false;
 static volatile bool resetting = false;
+static std::string config_file;
+static std::mutex hup_mutex;
 
 #define WWW_VERSION "1.0.0.55"
 
@@ -66,8 +70,47 @@ static void hup_handler(int signal)
     if (!stopped)
     {
         std::thread t([]() {
-                kv().hup();
-            });
+                          
+                          std::unique_lock<std::mutex> lk(hup_mutex);
+
+                          std::ifstream cf(config_file);
+                          Json::Value config;
+                          if (!owl::parse_json(cf, config))
+                          {
+                              LOG_ERROR("the config file " << config_file << " is not valid json");
+                              return;
+                          }
+
+                          auto httpd =
+                              kv().get_component<owl::httpd>(owl::httpd::NAME);
+
+                          if (!httpd)
+                          {
+                              return;
+                          }
+
+                          LOG_INFO("resetting httpd ports: " << config);
+
+                          httpd->clear_listeners();
+
+                          LOG_INFO("post clear listeners");
+
+                          if (config.isMember("http.port") && config["http.port"].isInt())
+                          {
+                              int port = config["http.port"].asInt();
+                              LOG_INFO("adding http port: " << port);
+                              httpd->add_listener(owl::httpd::PROTOCOL::HTTP, port);
+                          }
+                          
+                          if (config.isMember("https.port") && config["https.port"].isInt());
+                          {
+                              int port = config["https.port"].asInt();
+                              LOG_INFO("adding https port: " << port);
+                              httpd->add_listener(owl::httpd::PROTOCOL::HTTPS, port);
+                          }
+                          
+                          kv().hup();
+                      });
         t.detach();
     }
 }
@@ -121,6 +164,8 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    config_file = ss.config_file;
+
     std::string cert_file;
     std::string key_file;
 
@@ -158,12 +203,24 @@ int main(int argc, char** argv)
     kv().add(k1);
     kv().add(k2);
     
-    k1 = nullptr;
-    k2 = nullptr;
-    
     LOG_INFO("starting...");
     
     kv().initialize();
+    
+    if (config.isMember("http.port") && config["http.port"].isInt())
+    {
+        int port = config["http.port"].asInt();
+        k1->add_listener(owl::httpd::PROTOCOL::HTTP, port);
+    }
+    
+    if (config.isMember("https.port") && config["https.port"].isInt());
+    {
+        int port = config["https.port"].asInt();
+        k1->add_listener(owl::httpd::PROTOCOL::HTTPS, port);
+    }
+
+    k1 = nullptr;
+    k2 = nullptr;
     
     // start visor
     kv().start();

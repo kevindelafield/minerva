@@ -23,9 +23,7 @@
 namespace owl
 {
 
-    httpd::httpd() : http_listener(std::make_shared<connection>(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0)),
-                     https_listener(std::dynamic_pointer_cast<connection>(std::make_shared<ssl_connection>(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0))),
-                     m_realm(DIGEST_REALM),
+    httpd::httpd() : m_realm(DIGEST_REALM),
                      m_active_count(0),
                      m_request_count(0)
     {
@@ -46,26 +44,28 @@ namespace owl
         m_default_controller = controller;
     }
 
+    void httpd::clear_listeners()
+    {
+        LOG_INFO("clearing httpd listeners");
+
+        std::unique_lock<std::mutex> lk(m_listener_lock);
+
+        m_listeners.clear();
+
+        LOG_INFO("cleared httpd listeners");
+    }
+
+    void httpd::add_listener(httpd::PROTOCOL protocol, int port)
+    {
+        std::unique_lock<std::mutex> lk(m_listener_lock);
+
+        http_listener listener(port, protocol);
+
+        m_listeners.push_back(listener);
+    }
+
     void httpd::initialize()
     {
-        Json::Value port_value;
-        if (!get_setting("http.port", port_value))
-        {
-            set_setting("http.port", Json::Value(http_port_number));
-        }
-        else
-        {
-            http_port_number = port_value.asInt();
-        }
-        if (!get_setting("https.port", port_value))
-        {
-            set_setting("https.port", Json::Value(https_port_number));
-        }
-        else
-        {
-            https_port_number = port_value.asInt();
-        }
-
         // create handler thread pool
         handler_thread_pool = add_thread_pool(handler_count);
 
@@ -76,53 +76,53 @@ namespace owl
         add_thread(std::bind(&httpd::persist_thread_fn, this));
     }
 
+    void httpd::start_listeners()
+    {
+        m_listener_sockets.clear();
+
+        for (auto & listener : m_listeners)
+        {
+            std::shared_ptr<connection> conn;
+            if (listener.protocol == httpd::PROTOCOL::HTTP)
+            {
+                conn =
+                    std::make_shared<connection>(AF_INET,
+                                                 SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+            }
+            else if (listener.protocol == httpd::PROTOCOL::HTTPS)
+            {
+                conn = std::dynamic_pointer_cast<connection>(std::make_shared<ssl_connection>(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+            }
+            else
+            {
+                LOG_ERROR("invalid http protocol: " << listener.protocol);
+                continue;
+            }
+
+            if (!conn->reuse_addr(true))
+            {
+                FATAL_ERRNO("Failed to reuse address", errno);
+            }
+            if (!conn->bind(listener.port))
+            {
+                FATAL_ERRNO("Failed to bind to port", errno);
+            }
+            if (!conn->listen(max_queued_connections))
+            {
+                FATAL_ERRNO("Listen failed", errno);
+            }
+
+            listener.conn = conn;
+
+            m_listener_sockets[conn->get_socket()] = listener;
+
+            LOG_INFO("HTTPD listening on socket " << listener.port);
+        }
+    }
+
     void httpd::start()
     {
-        Json::Value http_port;
-        Json::Value https_port;
-        if (!get_setting("http.port", http_port))
-        {
-            FATAL("failed to get http.port setting");
-        }
-        if (!get_setting("https.port", https_port))
-        {
-            FATAL("failed to get http.port setting");
-        }
-        http_port_number = http_port.asInt();
-        https_port_number = https_port.asInt();
-
-        LOG_INFO("start listening on http: " << http_port_number);
-        LOG_INFO("start listening on https: " << https_port_number);
-
-        if (!http_listener->reuse_addr(true))
-        {
-            FATAL_ERRNO("Failed to reuse address", errno);
-        }
-        if (!http_listener->bind(http_port_number))
-        {
-            FATAL_ERRNO("Failed to bind to port", errno);
-        }
-        if (!http_listener->listen(max_queued_connections))
-        {
-            FATAL_ERRNO("Listen failed", errno);
-        }
-
-        if (!https_listener->reuse_addr(true))
-        {
-            FATAL_ERRNO("Failed to reuse address", errno);
-        }
-        if (!https_listener->bind(https_port_number))
-        {
-            FATAL_ERRNO("Failed to bind to port", errno);
-        }
-        if (!https_listener->listen(max_queued_connections))
-        {
-            FATAL_ERRNO("Listen failed", errno);
-        }
-
-        LOG_DEBUG("Httpd listening on socket " << http_port_number);
-        LOG_DEBUG("Httpd listening on socket " << https_port_number);
-
+        start_listeners();
     }
 
     void httpd::release()
@@ -131,60 +131,20 @@ namespace owl
 
     void httpd::hup()
     {
-        update_http_port(http_port_number);
-        update_https_port(https_port_number);
-    }
+        std::unique_lock<std::mutex> lk(m_listener_lock);
 
-    bool httpd::update_http_port(int port)
-    {
-        LOG_INFO("updating http port: " << port);
+        m_hup = true;
 
-        std::unique_lock<std::mutex> lk(lock);
-
-        // update settings
-        set_setting("http.port", Json::Value(port));
-        if (!save_settings())
+        while (!m_waiting_hup)
         {
-            LOG_ERROR("failed to save http.port setting");
-            return false;
+            m_listener_cond.wait(lk);
         }
 
-        m_new_http_port = port;
-        while (!should_shutdown() && m_new_http_port != -1)
-        {
-            cond.wait(lk);
-        }
-        if (should_shutdown())
-        {
-            return false;
-        }
-        return true;
-    }
+        start_listeners();
 
-    bool httpd::update_https_port(int port)
-    {
-        LOG_INFO("updating https port: " << port);
+        m_hup = false;
 
-        std::unique_lock<std::mutex> lk(lock);
-
-        // update settings
-        set_setting("https.port", Json::Value(port));
-        if (!save_settings())
-        {
-            LOG_ERROR("failed to save https.port setting");
-            return false;
-        }
-
-        m_new_https_port = port;
-        while (!should_shutdown() && m_new_https_port != -1)
-        {
-            cond.wait(lk);
-        }
-        if (should_shutdown())
-        {
-            return false;
-        }
-        return true;
+        m_listener_cond.notify_one();
     }
 
     Json::Value httpd::get_stats()
@@ -402,113 +362,40 @@ namespace owl
         cond.notify_all();
     }
 
-    void httpd::handle_http_port_update()
-    {
-        int new_port = m_new_http_port;
-        
-        if (new_port > -1)
-        {
-            LOG_INFO("binding to new http port: " << new_port);
-
-            std::unique_lock<std::mutex> lk(lock);
-
-            if (new_port == http_port_number)
-            {
-                LOG_INFO("same http port number - won't rebind: " << new_port);
-                m_new_http_port = -1;
-                cond.notify_all();
-                return;
-            }
-
-            http_port_number = m_new_http_port;
-            m_new_http_port = -1;
-            
-            http_listener =
-                std::make_shared<connection>(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
-
-            LOG_INFO("start listening on http: " << http_port_number);
-
-            if (!http_listener->reuse_addr(true))
-            {
-                FATAL_ERRNO("Failed to reuse address", errno);
-            }
-            if (!http_listener->bind(http_port_number))
-            {
-                FATAL_ERRNO("Failed to bind to port", errno);
-            }
-            if (!http_listener->listen(max_queued_connections))
-            {
-                FATAL_ERRNO("Listen failed", errno);
-            }
-            
-            cond.notify_all();
-        }
-    }
-
-    void httpd::handle_https_port_update()
-    {
-        int new_port = m_new_https_port;
-        
-        if (new_port > -1)
-        {
-            LOG_INFO("binding to new https port: " << new_port);
-
-            std::unique_lock<std::mutex> lk(lock);
-
-            if (new_port == https_port_number)
-            {
-                LOG_INFO("same https port number - won't rebind: " << new_port);
-                m_new_https_port = -1;
-                cond.notify_all();
-                return;
-            }
-
-            https_port_number = m_new_https_port;
-            m_new_https_port = -1;
-            
-            https_listener =
-                std::make_shared<connection>(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
-
-            LOG_INFO("start listening on https: " << https_port_number);
-
-            if (!https_listener->reuse_addr(true))
-            {
-                FATAL_ERRNO("Failed to reuse address", errno);
-            }
-            if (!https_listener->bind(https_port_number))
-            {
-                FATAL_ERRNO("Failed to bind to port", errno);
-            }
-            if (!https_listener->listen(max_queued_connections))
-            {
-                FATAL_ERRNO("Listen failed", errno);
-            }
-            
-            cond.notify_all();
-        }
-    }
-
     void httpd::listener_thread_fn()
     {
         LOG_DEBUG("listening for http(s) connections");
 
         while (!should_shutdown())
         {
-            // update ports if necessary
-            handle_http_port_update();
-            handle_https_port_update();
+            std::map<int, http_listener> listener_sockets;
 
-            
             std::vector<connection::shared_poll_fd> fds;
-            fds.push_back(connection::shared_poll_fd(http_listener->get_socket(),
-                                                     true,
-                                                     false,
-                                                     true));
-            fds.push_back(connection::shared_poll_fd(https_listener->get_socket(),
-                                                     true,
-                                                     false,
-                                                     true));
 
+            {
+                std::unique_lock<std::mutex> lk(m_listener_lock);
+
+                while (m_hup)
+                {
+                    m_waiting_hup = true;
+                    m_listener_cond.notify_one();
+                    m_listener_cond.wait(lk);
+                }
+
+                m_waiting_hup = false;
+
+
+                listener_sockets = m_listener_sockets;
+            }
+
+            for (auto & socket : listener_sockets)
+            {
+                fds.push_back(connection::shared_poll_fd(socket.first,
+                                                         true,
+                                                         false,
+                                                         true));
+            }
+            
             int err;
             int status = connection::poll(fds, polling_period_ms, err);
             if (status == 0)
@@ -540,9 +427,11 @@ namespace owl
                     continue;
                 }
 
-                bool http = it.socket == http_listener->get_socket();
+                auto listener = listener_sockets[it.socket].conn;
 
-                auto listener = http ? http_listener : https_listener;
+                bool http =
+                    listener_sockets[it.socket].protocol ==
+                    PROTOCOL::HTTP;
 
                 struct sockaddr_in addr;
                 socklen_t addr_len = sizeof(addr);
@@ -563,12 +452,13 @@ namespace owl
                         continue;
                     }
                 }
-                LOG_DEBUG("Accept Successful");
+
+                LOG_INFO("Accept Successful: " << http);
                 
                 // queue up request
-                auto conn = http ?
+                std::shared_ptr<connection> conn = http ?
                     std::make_shared<connection>(s) :
-                    std::make_shared<ssl_connection>(s);
+                    std::dynamic_pointer_cast<connection>(std::make_shared<ssl_connection>(s));
                 assert(conn);
                 
                 schedule_job([this, conn, addr, addr_len]()
