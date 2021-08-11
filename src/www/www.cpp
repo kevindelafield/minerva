@@ -115,6 +115,10 @@ static void hup_handler(int signal)
     }
 }
 
+static void null_handler(int signal)
+{
+}
+
 int main(int argc, char** argv)
 {
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin:/usr/bin/X11:/usr/local/bin:/usr/local/sbin", 1);
@@ -226,6 +230,7 @@ int main(int argc, char** argv)
     // gracefully handle shutdown for ctrl-c and sigterm
     signal(SIGINT, shutdown_signal_handler);
     signal(SIGTERM, shutdown_signal_handler);
+    signal(SIGUSR2, null_handler);
     signal(SIGHUP, hup_handler);
     
     // wait for components to stop
