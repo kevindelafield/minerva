@@ -115,10 +115,6 @@ static void hup_handler(int signal)
     }
 }
 
-static void null_handler(int signal)
-{
-}
-
 int main(int argc, char** argv)
 {
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin:/usr/bin/X11:/usr/local/bin:/usr/local/sbin", 1);
