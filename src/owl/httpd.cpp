@@ -144,7 +144,7 @@ namespace owl
 
         m_hup = false;
 
-        m_listener_cond.notify_one();
+        m_listener_cond.notify_all();
     }
 
     Json::Value httpd::get_stats()
@@ -368,8 +368,6 @@ namespace owl
 
         while (!should_shutdown())
         {
-            std::map<int, http_listener> listener_sockets;
-
             std::vector<connection::shared_poll_fd> fds;
 
             {
@@ -378,17 +376,14 @@ namespace owl
                 while (m_hup)
                 {
                     m_waiting_hup = true;
-                    m_listener_cond.notify_one();
+                    m_listener_cond.notify_all();
                     m_listener_cond.wait(lk);
                 }
 
                 m_waiting_hup = false;
-
-
-                listener_sockets = m_listener_sockets;
             }
 
-            for (auto & socket : listener_sockets)
+            for (auto & socket : m_listener_sockets)
             {
                 fds.push_back(connection::shared_poll_fd(socket.first,
                                                          true,
@@ -427,10 +422,10 @@ namespace owl
                     continue;
                 }
 
-                auto listener = listener_sockets[it.socket].conn;
+                auto listener = m_listener_sockets[it.socket].conn;
 
                 bool http =
-                    listener_sockets[it.socket].protocol ==
+                    m_listener_sockets[it.socket].protocol ==
                     PROTOCOL::HTTP;
 
                 struct sockaddr_in addr;
