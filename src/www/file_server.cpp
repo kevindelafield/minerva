@@ -23,8 +23,19 @@ namespace www
             svr->register_default_controller(this);
         }
 
-        m_root_dir = visor->config("www_root_dir");
-        m_default_file = visor->config("www_default_file");
+        auto conf = config();
+        if (!conf["www_root_dir"].isString())
+        {
+            FATAL("www_root_dir config file entry missing");
+        }
+
+        if (!conf["www_default_file"].isString())
+        {
+            FATAL("www_default_file config file entry missing");
+        }
+
+        m_root_dir = conf["www_root_dir"].asString();
+        m_default_file = conf["www_default_file"].asString();
 
         if (!owl::file_is_directory(m_root_dir))
         {

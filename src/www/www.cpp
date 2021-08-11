@@ -191,8 +191,6 @@ int main(int argc, char** argv)
 
     owl::ssl_connection::init(cert_file.c_str(), key_file.c_str());
 
-    kv().set_config(config);
-
     // build compponents
     auto k1 = std::make_shared<owl::httpd>();
     assert(k1);
@@ -203,6 +201,8 @@ int main(int argc, char** argv)
     kv().add(k1);
     kv().add(k2);
     
+    k2->config(config);
+
     LOG_INFO("starting...");
     
     kv().initialize();

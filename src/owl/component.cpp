@@ -78,20 +78,4 @@ namespace owl
     {
         return visor->cancel_job(handle);
     }
-
-    bool component::get_setting(const std::string & name, Json::Value & value)
-    {
-        return visor->get_setting(name, value);
-    }
-
-    void component::set_setting(const std::string & name, 
-                                const Json::Value & value)
-    {
-        visor->set_setting(name, value);
-    }
-
-    bool component::save_settings()
-    {
-        return visor->save_settings();
-    }
 }
