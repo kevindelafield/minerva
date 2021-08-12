@@ -13,6 +13,7 @@
 #include <owl/file_utils.h>
 #include <owl/json_utils.h>
 #include <owl/exec_utils.h>
+#include <authdb/auth_db.h>
 #include "file_server.h"
 #include "settings.h"
 
@@ -201,12 +202,19 @@ int main(int argc, char** argv)
     kv().add(k1);
     kv().add(k2);
     
+    if (config["webpass"].isString())
+    {
+        authdb::auth_db auth_db(config["webpass"].asString());
+        if (!auth_db.initialize())
+        {
+            FATAL("failed to initialize auth db");
+        }
+        k1->realm("minerva.com");
+        k1->auth_db(&auth_db);
+    }
+
     k2->config(config);
 
-    LOG_INFO("starting...");
-    
-    kv().initialize();
-    
     if (config.isMember("http.port") && config["http.port"].isInt())
     {
         int port = config["http.port"].asInt();
@@ -221,6 +229,10 @@ int main(int argc, char** argv)
 
     k1 = nullptr;
     k2 = nullptr;
+    
+    LOG_INFO("starting...");
+    
+    kv().initialize();
     
     // start visor
     kv().start();

@@ -5,13 +5,16 @@
 #include <map>
 #include <owl/http_auth.h>
 
-namespace www
+namespace authdb
 {
-    class www_auth_db : public owl::http_auth_db
+    class auth_db : public owl::http_auth_db
     {
     public:
-        www_auth_db();
-        ~www_auth_db() = default;
+        auth_db(const std::string & webpass) : m_webpass(webpass)
+        {
+        }
+        
+        ~auth_db() = default;
         
         bool initialize();
 
@@ -30,7 +33,10 @@ namespace www
         std::map<std::string, owl::http_auth_user> _user_map;
         std::mutex _lock;
         bool _initialized = false;
+        std::string m_webpass;
 
         bool write_map() const;
+        bool load_user_map(std::map<std::string,
+                           owl::http_auth_user> & user_map);
     };
 }

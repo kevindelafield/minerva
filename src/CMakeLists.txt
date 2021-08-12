@@ -57,6 +57,9 @@ include_directories(.)
 include_directories(owl)
 add_subdirectory(owl)
 
+include_directories(authdb)
+add_subdirectory(authdb)
+
 include_directories(www)
 add_subdirectory(www)
 

@@ -8,4 +8,4 @@ FILE (GLOB APP_SRC "*.cpp")
 
 add_library(owl STATIC ${APP_SRC} ${APP_INCLUDE})
 
-target_link_libraries(owl ${JSONCPP_LIBRARY})
+target_link_libraries(owl pthread stdc++ rt ${UUID_LIBRARY} ${CURL_LIBRARY} ${CRYPTO_LIBRARY} ${SSL_LIBRARY} ${NGHTTP2_LIBRARY} ${IDN2_LIBRARY} ${SSH2_LIBRARY} ${Z_LIBRARY} ${UNISTRING_LIBRARY} ${JSONCPP_LIBRARY})

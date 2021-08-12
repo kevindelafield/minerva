@@ -2,19 +2,20 @@
 #include <fstream>
 #include <owl/safe_ofstream.h>
 #include <owl/log.h>
-#include "www_auth_db.h"
+#include "auth_db.h"
 
 using namespace owl;
 
-namespace www
+namespace authdb
 {
-    static bool load_user_map(std::map<std::string, http_auth_user> & user_map)
+    bool auth_db::load_user_map(std::map<std::string,
+                                    http_auth_user> & user_map)
     {
-        std::ifstream is("/etc/webpass.txt");
+        std::ifstream is(m_webpass);
 
         if (!is.is_open())
         {
-            LOG_WARN("failed to open webpass.txt");
+            LOG_WARN("failed to open auth db " << m_webpass);
             return true;
         }
 
@@ -30,19 +31,19 @@ namespace www
             std::getline(ss, user, ':');
             if (!ss)
             {
-                LOG_ERROR("invalid webpass.txt");
+                LOG_ERROR("invalid webpass db " << m_webpass);
                 return false;
             }
             std::getline(ss, realm, ':');
             if (!ss)
             {
-                LOG_ERROR("invalid webpass.txt");
+                LOG_ERROR("invalid webpass db " << m_webpass);
                 return false;
             }
             std::getline(ss, hash, ':');
             if (!ss)
             {
-                LOG_ERROR("invalid webpass.txt");
+                LOG_ERROR("invalid webpass db " << m_webpass);
                 return false;
             }
 
@@ -54,11 +55,7 @@ namespace www
         return true;
     }
 
-    www_auth_db::www_auth_db()
-    {
-    }
-
-    bool www_auth_db::initialize()
+    bool auth_db::initialize()
     {
         std::unique_lock<std::mutex> lk(_lock);
 
@@ -78,7 +75,7 @@ namespace www
         return true;
     }
 
-    bool www_auth_db::find_user(const std::string & username,
+    bool auth_db::find_user(const std::string & username,
                                 http_auth_user & user)
     {
         assert(_initialized);
@@ -94,13 +91,13 @@ namespace www
         return false;
     }
 
-    bool www_auth_db::write_map() const
+    bool auth_db::write_map() const
     {
-        safe_ofstream os("/adc/persistent/settings/webpass.txt");
+        safe_ofstream os(m_webpass);
 
         if (!os.is_open())
         {
-            LOG_ERROR("failed to open webpass.txt");
+            LOG_ERROR("failed to open webpass db " << m_webpass);
             return false;
         }
 
@@ -111,14 +108,14 @@ namespace www
 
         if (!os.commit())
         {
-            LOG_ERROR("failed to write webpass.txt");
+            LOG_ERROR("failed to write to webpass db " << m_webpass);
             return false;
         }
 
         return true;
     }
 
-    bool www_auth_db::set_user(const std::string & username,
+    bool auth_db::set_user(const std::string & username,
                                const std::string & realm,
                                const std::string & password)
     {
@@ -141,7 +138,7 @@ namespace www
         return true;
     }
 
-    bool www_auth_db::delete_user(const std::string & username)
+    bool auth_db::delete_user(const std::string & username)
     {
         assert(_initialized);
 
@@ -164,7 +161,7 @@ namespace www
         return true;
     }
 
-    bool www_auth_db::clear()
+    bool auth_db::clear()
     {
         assert(_initialized);
 
