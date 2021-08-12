@@ -46,13 +46,9 @@ namespace owl
 
     void httpd::clear_listeners()
     {
-        LOG_INFO("clearing httpd listeners");
-
         std::unique_lock<std::mutex> lk(m_listener_lock);
 
         m_listeners.clear();
-
-        LOG_INFO("cleared httpd listeners");
     }
 
     void httpd::add_listener(httpd::PROTOCOL protocol, int port)
@@ -453,7 +449,7 @@ namespace owl
                     }
                 }
 
-                LOG_INFO("Accept Successful: " << http);
+                LOG_DEBUG("Accept Successful: " << http);
                 
                 // queue up request
                 std::shared_ptr<connection> conn = http ?
