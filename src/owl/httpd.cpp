@@ -563,15 +563,15 @@ namespace owl
                                            *m_auth_db,
                                            user);
         // basic header check
-        // if (!success)
-        // {
-        //     success = 
-        //         authenticate_basic(ctx,
-        //                            auth_header,
-        //                            realm(),
-        //                            *m_auth_db,
-        //                            user);
-        // }
+        if (!success)
+        {
+            success = 
+                authenticate_basic(ctx,
+                                   auth_header,
+                                   realm(),
+                                   *m_auth_db,
+                                   user);
+        }
 
         if (success)
         {
