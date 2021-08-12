@@ -72,7 +72,7 @@ namespace owl
 
         auto now = std::chrono::steady_clock::now();
 
-        auto next_run = now + std::chrono::milliseconds(60000);
+        auto next_run = now + std::chrono::seconds(60);
         if (it != jobs.end()) {
             next_run = std::get<0>(*it);
         }
