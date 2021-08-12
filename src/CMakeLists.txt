@@ -60,6 +60,9 @@ add_subdirectory(owl)
 include_directories(authdb)
 add_subdirectory(authdb)
 
+include_directories(shield)
+add_subdirectory(shield)
+
 include_directories(www)
 add_subdirectory(www)
 

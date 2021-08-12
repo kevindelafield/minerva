@@ -16,7 +16,7 @@ namespace authdb
         if (!is.is_open())
         {
             LOG_WARN("failed to open auth db " << m_webpass);
-            return true;
+            return false;
         }
 
         std::string line;
