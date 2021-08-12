@@ -81,7 +81,7 @@ namespace owl
         if (next_run > now)
         {
             auto duration =
-                std::chrono::duration_cast<std::chrono::milliseconds>(next_run - now);
+                std::chrono::duration_cast<std::chrono::nanoseconds>(next_run - now);
 
             cond.wait_for(lk, duration);
         }
