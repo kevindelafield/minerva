@@ -48,6 +48,10 @@ namespace owl
         http_auth_db() = default;
         ~http_auth_db() = default;
 
+        virtual bool initialize() {
+            return true;
+        };
+
         virtual bool find_user(const std::string & username,
                                http_auth_user & user) = 0;
     };

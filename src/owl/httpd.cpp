@@ -145,6 +145,11 @@ namespace owl
         m_hup = false;
 
         m_listener_cond.notify_all();
+
+        if (!m_auth_db->initialize())
+        {
+            LOG_ERROR("failed to reload HTTPD auth db");
+        }
     }
 
     Json::Value httpd::get_stats()

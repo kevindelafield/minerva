@@ -8,9 +8,12 @@ using namespace owl;
 
 namespace authdb
 {
-    bool auth_db::load_user_map(std::map<std::string,
-                                    http_auth_user> & user_map)
+    bool auth_db::initialize()
     {
+        std::unique_lock<std::mutex> lk(_lock);
+
+        _user_map.clear();
+
         std::ifstream is(m_webpass);
 
         if (!is.is_open())
@@ -47,30 +50,10 @@ namespace authdb
                 return false;
             }
 
-            user_map[user] = http_auth_user(user, realm, hash);
+            _user_map[user] = http_auth_user(user, realm, hash);
 
             std::getline(is, line);
         }
-
-        return true;
-    }
-
-    bool auth_db::initialize()
-    {
-        std::unique_lock<std::mutex> lk(_lock);
-
-        if (_initialized)
-        {
-            return true;
-        }
-        
-        if (!load_user_map(_user_map))
-        {
-            LOG_ERROR("failed to load http user db");            
-            return false;
-        }
-
-        _initialized = true;
 
         return true;
     }

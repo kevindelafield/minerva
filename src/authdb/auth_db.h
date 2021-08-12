@@ -16,7 +16,7 @@ namespace authdb
         
         ~auth_db() = default;
         
-        bool initialize();
+        bool initialize() override;
 
         bool set_user(const std::string & username,
                       const std::string & realm,
@@ -36,7 +36,5 @@ namespace authdb
         std::string m_webpass;
 
         bool write_map() const;
-        bool load_user_map(std::map<std::string,
-                           owl::http_auth_user> & user_map);
     };
 }
