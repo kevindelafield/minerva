@@ -75,13 +75,22 @@ namespace www
         // don't allow up directory
         std::stringstream ss(filename);
         std::string segment;
+        int counter = 0;
         while (next_path_segment(ss, segment))
         {
             if (segment == "..")
             {
-                ctx.response().status_code_forbidden();
-                return;
+                counter--;
             }
+            else
+            {
+                counter++;
+            }
+        }
+        if (counter < 0)
+        {
+            ctx.response().status_code_forbidden();
+            return;
         }
 
         if (filename == "/")
