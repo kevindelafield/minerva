@@ -1,10 +1,9 @@
-#include "ssl_connection.h"
-
 #include <cassert>
 #include <errno.h>
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include "ssl_connection.h"
 
 namespace owl
 {

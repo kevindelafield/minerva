@@ -1,9 +1,9 @@
 #pragma once
 
-#include "connection.h"
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include "connection.h"
 
 namespace owl
 {

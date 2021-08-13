@@ -1,10 +1,9 @@
-#include "safe_ofstream.h"
-
 #include <unistd.h>
 #include <stdio.h>
-#include "owl/locks.h"
-#include "owl/unique_command.h"
+#include "locks.h"
+#include "unique_command.h"
 #include "log.h"
+#include "safe_ofstream.h"
 
 namespace owl
 {

@@ -1,7 +1,7 @@
 #pragma once
 
+#include <mutex>
 #include <shared_mutex>
-#include "shared_file_lock.h"
 
 namespace owl
 {

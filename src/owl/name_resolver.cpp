@@ -11,7 +11,7 @@
 #include <iostream>
 #include <cassert>
 #include "name_resolver.h"
-#include <owl/log.h>
+#include "log.h"
 
 namespace owl
 {
