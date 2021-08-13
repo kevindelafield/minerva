@@ -101,11 +101,11 @@ namespace httpd
             }
             if (!conn->bind(listener.port))
             {
-                FATAL_ERRNO("Failed to bind to port", errno);
+                FATAL_ERRNO("Failed to bind to port " << listener.port, errno);
             }
             if (!conn->listen(max_queued_connections))
             {
-                FATAL_ERRNO("Listen failed", errno);
+                FATAL_ERRNO("Listen failed for port " << listener.port, errno);
             }
 
             listener.conn = conn;
