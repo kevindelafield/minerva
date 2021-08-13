@@ -199,9 +199,9 @@ namespace httpd
                                 int timeoutMs);
 
         bool m_chunked = false;
-        bool _full_read = false;
-        bool _partial_read = false;
-        size_t _total_read = 0;
+        bool m_full_read = false;
+        bool m_partial_read = false;
+        size_t m_total_read = 0;
         size_t m_offset;
         std::map<std::string, std::string, owl::ci_less> m_headers;
         METHOD m_method;
@@ -211,9 +211,9 @@ namespace httpd
         std::map<std::string, std::string, owl::ci_less> m_query_params;
         http_content_type::code m_content_type;
         std::string m_query_string;
-        http_context * _ctx;
-        std::deque<char> _overflow;
-        std::stringstream _fullbuf;
+        http_context * m_ctx;
+        std::deque<char> m_overflow;
+        std::stringstream m_fullbuf;
         bool m_keep_alive = true;
         bool m_continue_100 = false;
     };

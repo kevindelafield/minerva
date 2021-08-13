@@ -65,13 +65,13 @@ namespace httpd
                 ssize_t left = to_read - total;
                 ssize_t sent;
 
-                if (_ctx->should_shutdown())
+                if (m_ctx->should_shutdown())
                 {
                     return false;
                 }
 
                 // check for aggregate timeout
-                if (_ctx->timed_out())
+                if (m_ctx->timed_out())
                 {
                     LOG_DEBUG("Socket write timeout");
                     return false;
@@ -82,7 +82,7 @@ namespace httpd
                 bool error_flag = writing;
 
                 int poll_status = 
-                    _ctx->conn()->poll(read_flag, write_flag, error_flag,
+                    m_ctx->conn()->poll(read_flag, write_flag, error_flag,
                                        500);
 
                 if (poll_status < 0)
@@ -101,7 +101,7 @@ namespace httpd
                     return false;
                 }
 
-                auto status = _ctx->conn()->write(buf + total, left, sent);
+                auto status = m_ctx->conn()->write(buf + total, left, sent);
                 switch (status)
                 {
                 case owl::connection::CONNECTION_ERROR:
@@ -143,7 +143,7 @@ namespace httpd
 
         std::stringstream os;
 
-        auto content_length = _ctx->response().response_stream().tellp();
+        auto content_length = m_ctx->response().response_stream().tellp();
         // handle unwritten stream
         if (content_length < 0)
         {
@@ -188,7 +188,7 @@ namespace httpd
             }
             os << CRLF;
         }
-        if (_ctx->request().keep_alive())
+        if (m_ctx->request().keep_alive())
         {
             os << "Connection: keep-alive";
         }

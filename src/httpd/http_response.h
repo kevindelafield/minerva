@@ -206,7 +206,7 @@ namespace httpd
     http_response(http_context * ctx) 
         : m_status_code(http_response_code::HTTP_RETCODE_INT_SERVER_ERR),
             m_content_type(http_content_type::code::CONTENT_TYPE_UNKNOWN),
-            m_http11(true), _ctx(ctx)
+            m_http11(true), m_ctx(ctx)
         {
         }
 
@@ -411,7 +411,7 @@ namespace httpd
         std::stringstream m_response_stream;
         std::string m_status_message;
         int m_http11;
-        http_context * _ctx;
+        http_context * m_ctx;
         std::vector<std::tuple<std::string, std::string>> m_headers;
         bool m_chunked = false;
         bool m_nosize = false;

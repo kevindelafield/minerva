@@ -27,7 +27,7 @@ namespace httpd
         m_http11(false), m_method(METHOD::GET),
         m_content_length(0),
         m_content_type(http_content_type::code::CONTENT_TYPE_UNKNOWN),
-        _ctx(ctx)
+        m_ctx(ctx)
     {
     }
 
@@ -298,12 +298,12 @@ namespace httpd
         }
 
         // add overflow for body reads
-        _overflow.clear();
-        _overflow.insert(_overflow.end(),
-                         buf.begin() + offset,
-                         buf.end());
+        m_overflow.clear();
+        m_overflow.insert(m_overflow.end(),
+                          buf.begin() + offset,
+                          buf.end());
 
-        if (!m_chunked && _overflow.size() > m_content_length)
+        if (!m_chunked && m_overflow.size() > m_content_length)
         {
             LOG_WARN("Invalid reuqest: more content then provided in content length");
             return false;
@@ -314,14 +314,14 @@ namespace httpd
 
     std::istream & http_request::read_fully_cl(int timeoutMs)
     {
-        std::copy(_overflow.begin(), _overflow.end(),
-                  std::ostream_iterator<char>(_fullbuf));
+        std::copy(m_overflow.begin(), m_overflow.end(),
+                  std::ostream_iterator<char>(m_fullbuf));
 
-        _total_read = _overflow.size();
+        m_total_read = m_overflow.size();
 
-        size_t left = m_content_length - _overflow.size();
+        size_t left = m_content_length - m_overflow.size();
 
-        _overflow.clear();
+        m_overflow.clear();
 
         owl::timer _timer(true);
 
@@ -330,11 +330,11 @@ namespace httpd
             char buf[10*1024];
             size_t to_read = std::min(sizeof(buf), left);
             size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
-            _fullbuf.write(buf, read);
+            m_fullbuf.write(buf, read);
             left -= read;
-            _total_read += read;
+            m_total_read += read;
         }
-        return _fullbuf;
+        return m_fullbuf;
     }
 
     std::istream & http_request::read_fully_chunked(int timeoutMs)
@@ -350,11 +350,11 @@ namespace httpd
             {
                 bool found_nl = false;
                 int nl_index = 0;
-                for (int i = 0; i<_overflow.size(); i++)
+                for (int i = 0; i < m_overflow.size(); i++)
                 {
-                    if (_overflow[i] == '\r' &&
-                        _overflow.size() > i + 1 &&
-                        _overflow[i+1] == '\n')
+                    if (m_overflow[i] == '\r' &&
+                        m_overflow.size() > i + 1 &&
+                        m_overflow[i+1] == '\n')
                     {
                         found_nl = true;
                         nl_index = i;
@@ -366,11 +366,11 @@ namespace httpd
                     std::string hex;
                     for (int i=0; i<nl_index; i++)
                     {
-                        hex += _overflow.front();
-                        _overflow.pop_front();
+                        hex += m_overflow.front();
+                        m_overflow.pop_front();
                     }
-                    _overflow.pop_front();
-                    _overflow.pop_front();
+                    m_overflow.pop_front();
+                    m_overflow.pop_front();
 
                     if (hex.size() % 2 != 0)
                     {
@@ -399,13 +399,13 @@ namespace httpd
                         m_chunk_read = 0;
                     }
                 }
-                else if (_overflow.size() < 100)
+                else if (m_overflow.size() < 100)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
                 else
                 {
@@ -417,16 +417,16 @@ namespace httpd
 
             case CHUNK_STATE::READING_CHUNK_BODY:
             {
-                if (!_overflow.empty())
+                if (!m_overflow.empty())
                 {
                     size_t to_read = 
-                        std::min(_overflow.size(), 
+                        std::min(m_overflow.size(), 
                                  static_cast<unsigned long>(m_chunk_size - m_chunk_read));
-                    std::copy(_overflow.begin(), 
-                              _overflow.begin() + to_read,
-                              std::ostream_iterator<char>(_fullbuf));
-                    _overflow.erase(_overflow.begin(),
-                                    _overflow.begin() + to_read);
+                    std::copy(m_overflow.begin(), 
+                              m_overflow.begin() + to_read,
+                              std::ostream_iterator<char>(m_fullbuf));
+                    m_overflow.erase(m_overflow.begin(),
+                                     m_overflow.begin() + to_read);
                     m_chunk_read += to_read;
                 }
 
@@ -443,7 +443,7 @@ namespace httpd
                 size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                 // read will be > 0
                 std::copy(buf, buf+read,
-                          std::ostream_iterator<char>(_fullbuf));
+                          std::ostream_iterator<char>(m_fullbuf));
                 m_chunk_read += read;
 
                 if (m_chunk_read == m_chunk_size)
@@ -456,21 +456,21 @@ namespace httpd
 
             case CHUNK_STATE::READING_CHUNK_TERMINATOR:
             {
-                if (_overflow.size() < 2)
+                if (m_overflow.size() < 2)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
-                if (_overflow.size() > 1)
+                if (m_overflow.size() > 1)
                 {
-                    if (_overflow[0] == '\r' &&
-                        _overflow[1] == '\n')
+                    if (m_overflow[0] == '\r' &&
+                        m_overflow[1] == '\n')
                     {
-                        _overflow.pop_front();
-                        _overflow.pop_front();
+                        m_overflow.pop_front();
+                        m_overflow.pop_front();
                         m_chunk_state = CHUNK_STATE::READING_CHUNK_HEADER;
                     }
                     else
@@ -484,21 +484,21 @@ namespace httpd
 
             case CHUNK_STATE::READING_END:
             {
-                if (_overflow.size() < 2)
+                if (m_overflow.size() < 2)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
-                if (_overflow.size() == 2)
+                if (m_overflow.size() == 2)
                 {
-                    if (_overflow[0] == '\r' &&
-                        _overflow[1] == '\n')
+                    if (m_overflow[0] == '\r' &&
+                        m_overflow[1] == '\n')
                     {
-                        _overflow.pop_front();
-                        _overflow.pop_front();
+                        m_overflow.pop_front();
+                        m_overflow.pop_front();
                         m_chunk_state = CHUNK_STATE::DONE;
                     }
                     else
@@ -507,7 +507,7 @@ namespace httpd
                         throw http_exception("invalid chunk terminator");
                     }
                 }
-                else if (_overflow.size() > 2)
+                else if (m_overflow.size() > 2)
                 {
                     LOG_WARN("received data after final chunk terminator");
                     throw http_exception("invalid chunk end terminator");
@@ -516,7 +516,7 @@ namespace httpd
             break;
             }
         }
-        return _fullbuf;
+        return m_fullbuf;
     }
 
     void http_request::read_chunk(std::vector<char> & buffer, int timeoutMs)
@@ -525,7 +525,7 @@ namespace httpd
         {
             throw new http_exception("chunk protocol violation");
         }
-        _partial_read = true;
+        m_partial_read = true;
 
         buffer.clear();
 
@@ -547,11 +547,11 @@ namespace httpd
             {
                 bool found_nl = false;
                 int nl_index = 0;
-                for (int i = 0; i<_overflow.size(); i++)
+                for (int i = 0; i<m_overflow.size(); i++)
                 {
-                    if (_overflow[i] == '\r' &&
-                        _overflow.size() > i + 1 &&
-                        _overflow[i+1] == '\n')
+                    if (m_overflow[i] == '\r' &&
+                        m_overflow.size() > i + 1 &&
+                        m_overflow[i+1] == '\n')
                     {
                         found_nl = true;
                         nl_index = i;
@@ -563,11 +563,11 @@ namespace httpd
                     std::string hex;
                     for (int i=0; i<nl_index; i++)
                     {
-                        hex += _overflow.front();
-                        _overflow.pop_front();
+                        hex += m_overflow.front();
+                        m_overflow.pop_front();
                     }
-                    _overflow.pop_front();
-                    _overflow.pop_front();
+                    m_overflow.pop_front();
+                    m_overflow.pop_front();
                     std::stringstream ss;
                     try
                     {
@@ -590,13 +590,13 @@ namespace httpd
                         buffer.reserve(m_chunk_size);
                     }
                 }
-                else if (_overflow.size() < 100)
+                else if (m_overflow.size() < 100)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
                 else
                 {
@@ -608,16 +608,16 @@ namespace httpd
 
             case CHUNK_STATE::READING_CHUNK_BODY:
             {
-                if (!_overflow.empty())
+                if (!m_overflow.empty())
                 {
                     size_t to_read = 
-                        std::min(_overflow.size(), 
+                        std::min(m_overflow.size(), 
                                  static_cast<unsigned long>(m_chunk_size - m_chunk_read));
-                    std::copy(_overflow.begin(), 
-                              _overflow.begin() + to_read,
+                    std::copy(m_overflow.begin(), 
+                              m_overflow.begin() + to_read,
                               std::back_inserter(buffer));
-                    _overflow.erase(_overflow.begin(),
-                                    _overflow.begin() + to_read);
+                    m_overflow.erase(m_overflow.begin(),
+                                     m_overflow.begin() + to_read);
                     m_chunk_read += to_read;
                 }
 
@@ -647,21 +647,21 @@ namespace httpd
 
             case CHUNK_STATE::READING_CHUNK_TERMINATOR:
             {
-                if (_overflow.size() < 2)
+                if (m_overflow.size() < 2)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
-                if (_overflow.size() > 1)
+                if (m_overflow.size() > 1)
                 {
-                    if (_overflow[0] == '\r' &&
-                        _overflow[1] == '\n')
+                    if (m_overflow[0] == '\r' &&
+                        m_overflow[1] == '\n')
                     {
-                        _overflow.pop_front();
-                        _overflow.pop_front();
+                        m_overflow.pop_front();
+                        m_overflow.pop_front();
                         m_chunk_state = CHUNK_STATE::READING_CHUNK_HEADER;
                     }
                     else
@@ -675,21 +675,21 @@ namespace httpd
 
             case CHUNK_STATE::READING_END:
             {
-                if (_overflow.size() < 2)
+                if (m_overflow.size() < 2)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
-                if (_overflow.size() == 2)
+                if (m_overflow.size() == 2)
                 {
-                    if (_overflow[0] == '\r' &&
-                        _overflow[1] == '\n')
+                    if (m_overflow[0] == '\r' &&
+                        m_overflow[1] == '\n')
                     {
-                        _overflow.pop_front();
-                        _overflow.pop_front();
+                        m_overflow.pop_front();
+                        m_overflow.pop_front();
                         m_chunk_state = CHUNK_STATE::DONE;
                     }
                     else
@@ -698,7 +698,7 @@ namespace httpd
                         throw http_exception("invalid chunk terminator");
                     }
                 }
-                else if (_overflow.size() > 2)
+                else if (m_overflow.size() > 2)
                 {
                     LOG_WARN("received data after final chunk terminator");
                     throw http_exception("invalid chunk end terminator");
@@ -711,15 +711,15 @@ namespace httpd
 
     std::istream & http_request::read_fully(int timeoutMs)
     {
-        if (_partial_read)
+        if (m_partial_read)
         {
             throw http_exception("protocol violation");
         }
-        if (_full_read)
+        if (m_full_read)
         {
             throw http_exception("protocol violation");
         }
-        _full_read = true;
+        m_full_read = true;
     
         if (chunked())
         {
@@ -733,7 +733,7 @@ namespace httpd
 
     bool http_request::has_overflow()
     {
-        if (_overflow.size() > 0)
+        if (m_overflow.size() > 0)
         {
             LOG_DEBUG("has overflow");
             return true;
@@ -743,7 +743,7 @@ namespace httpd
         bool write_flag = false;
         bool error_flag = true;
         int poll_status = 
-            _ctx->conn()->poll(read_flag, write_flag, error_flag, 0);
+            m_ctx->conn()->poll(read_flag, write_flag, error_flag, 0);
         if (poll_status < 0)
         {
             LOG_WARN_ERRNO("Poll error", errno);
@@ -764,28 +764,28 @@ namespace httpd
 
     size_t http_request::read_cl(char * buf, size_t len, int timeoutMs)
     {
-        if (_total_read >= m_content_length)
+        if (m_total_read >= m_content_length)
         {
             return 0;
         }
 
-        if (!_overflow.empty())
+        if (!m_overflow.empty())
         {
-            auto it = _overflow.cbegin();
-            size_t to_copy = std::min(len, _overflow.size());
+            auto it = m_overflow.cbegin();
+            size_t to_copy = std::min(len, m_overflow.size());
             for (int i=0; i<to_copy; i++, it++)
             {
                 buf[i] = *it;
             }
 
-            _overflow.erase(_overflow.begin(), _overflow.begin() + to_copy);
-            _total_read += to_copy;
+            m_overflow.erase(m_overflow.begin(), m_overflow.begin() + to_copy);
+            m_total_read += to_copy;
             return to_copy;
         }
 
         size_t to_read =
             std::min(len,
-                     static_cast<unsigned long>(m_content_length) - _total_read);
+                     static_cast<unsigned long>(m_content_length) - m_total_read);
         if (to_read == 0)
         {
             return 0;
@@ -793,7 +793,7 @@ namespace httpd
 
         owl::timer _timer(true);
         size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
-        _total_read += read;
+        m_total_read += read;
     
         return read;
     }
@@ -811,11 +811,11 @@ namespace httpd
             {
                 bool found_nl = false;
                 int nl_index = 0;
-                for (int i = 0; i<_overflow.size(); i++)
+                for (int i = 0; i < m_overflow.size(); i++)
                 {
-                    if (_overflow[i] == '\r' &&
-                        _overflow.size() > i + 1 &&
-                        _overflow[i+1] == '\n')
+                    if (m_overflow[i] == '\r' &&
+                        m_overflow.size() > i + 1 &&
+                        m_overflow[i+1] == '\n')
                     {
                         found_nl = true;
                         nl_index = i;
@@ -827,11 +827,11 @@ namespace httpd
                     std::string hex;
                     for (int i=0; i<nl_index; i++)
                     {
-                        hex += _overflow.front();
-                        _overflow.pop_front();
+                        hex += m_overflow.front();
+                        m_overflow.pop_front();
                     }
-                    _overflow.pop_front();
-                    _overflow.pop_front();
+                    m_overflow.pop_front();
+                    m_overflow.pop_front();
                     std::stringstream ss;
                     try
                     {
@@ -853,13 +853,13 @@ namespace httpd
                         m_chunk_read = 0;
                     }
                 }
-                else if (_overflow.size() < 100)
+                else if (m_overflow.size() < 100)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
                 else
                 {
@@ -871,20 +871,20 @@ namespace httpd
 
             case CHUNK_STATE::READING_CHUNK_BODY:
             {
-                if (!_overflow.empty())
+                if (!m_overflow.empty())
                 {
-                    auto it = _overflow.cbegin();
+                    auto it = m_overflow.cbegin();
                     size_t to_copy = 
                         std::min(static_cast<unsigned long>(m_chunk_size - m_chunk_read), 
-                                 std::min(len, _overflow.size()));
+                                 std::min(len, m_overflow.size()));
                     for (int i=0; i<to_copy; i++, it++)
                     {
                         buf[i] = *it;
                     }
 
-                    _overflow.erase(_overflow.begin(), 
-                                    _overflow.begin() + to_copy);
-                    _total_read += to_copy;
+                    m_overflow.erase(m_overflow.begin(), 
+                                     m_overflow.begin() + to_copy);
+                    m_total_read += to_copy;
                     m_chunk_read += to_copy;
                     if (m_chunk_read == m_chunk_size)
                     {
@@ -904,7 +904,7 @@ namespace httpd
                              static_cast<unsigned long>(m_chunk_size - m_chunk_read));
                 size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                 m_chunk_read += read;
-                _total_read += read;
+                m_total_read += read;
 
                 if (m_chunk_read == m_chunk_size)
                 {
@@ -916,21 +916,21 @@ namespace httpd
 
             case CHUNK_STATE::READING_CHUNK_TERMINATOR:
             {
-                if (_overflow.size() < 2)
+                if (m_overflow.size() < 2)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
-                if (_overflow.size() > 1)
+                if (m_overflow.size() > 1)
                 {
-                    if (_overflow[0] == '\r' &&
-                        _overflow[1] == '\n')
+                    if (m_overflow[0] == '\r' &&
+                        m_overflow[1] == '\n')
                     {
-                        _overflow.pop_front();
-                        _overflow.pop_front();
+                        m_overflow.pop_front();
+                        m_overflow.pop_front();
                         m_chunk_state = CHUNK_STATE::READING_CHUNK_HEADER;
                     }
                     else
@@ -944,21 +944,21 @@ namespace httpd
 
             case CHUNK_STATE::READING_END:
             {
-                if (_overflow.size() < 2)
+                if (m_overflow.size() < 2)
                 {
                     char buf[100];
                     size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                     // read will be > 0
                     std::copy(buf, buf+read,
-                              std::back_inserter(_overflow));
+                              std::back_inserter(m_overflow));
                 }
-                if (_overflow.size() == 2)
+                if (m_overflow.size() == 2)
                 {
-                    if (_overflow[0] == '\r' &&
-                        _overflow[1] == '\n')
+                    if (m_overflow[0] == '\r' &&
+                        m_overflow[1] == '\n')
                     {
-                        _overflow.pop_front();
-                        _overflow.pop_front();
+                        m_overflow.pop_front();
+                        m_overflow.pop_front();
                         m_chunk_state = CHUNK_STATE::DONE;
                     }
                     else
@@ -967,7 +967,7 @@ namespace httpd
                         throw http_exception("invalid chunk terminator");
                     }
                 }
-                else if (_overflow.size() > 2)
+                else if (m_overflow.size() > 2)
                 {
                     LOG_WARN("received data after final chunk terminator");
                     throw http_exception("invalid chunk end terminator");
@@ -981,11 +981,11 @@ namespace httpd
 
     size_t http_request::read(char * buf, size_t len, int timeoutMs)
     {
-        if (_full_read)
+        if (m_full_read)
         {
             throw http_exception("protocol violation");
         }
-        _partial_read = true;
+        m_partial_read = true;
 
         if (chunked())
         {
@@ -999,7 +999,7 @@ namespace httpd
 
     bool http_request::null_body_read_cl(int timeoutMs)
     {
-        size_t left = m_content_length - _total_read - _overflow.size();
+        size_t left = m_content_length - m_total_read - m_overflow.size();
 
         char buf[64*1024];
         owl::timer timer(true);
@@ -1037,11 +1037,11 @@ namespace httpd
                 {
                     bool found_nl = false;
                     int nl_index = 0;
-                    for (int i = 0; i<_overflow.size(); i++)
+                    for (int i = 0; i < m_overflow.size(); i++)
                     {
-                        if (_overflow[i] == '\r' &&
-                            _overflow.size() > i + 1 &&
-                            _overflow[i+1] == '\n')
+                        if (m_overflow[i] == '\r' &&
+                            m_overflow.size() > i + 1 &&
+                            m_overflow[i+1] == '\n')
                         {
                             found_nl = true;
                             nl_index = i;
@@ -1053,11 +1053,11 @@ namespace httpd
                         std::string hex;
                         for (int i=0; i<nl_index; i++)
                         {
-                            hex += _overflow.front();
-                            _overflow.pop_front();
+                            hex += m_overflow.front();
+                            m_overflow.pop_front();
                         }
-                        _overflow.pop_front();
-                        _overflow.pop_front();
+                        m_overflow.pop_front();
+                        m_overflow.pop_front();
                         std::stringstream ss;
                         try
                         {
@@ -1079,13 +1079,13 @@ namespace httpd
                             m_chunk_read = 0;
                         }
                     }
-                    else if (_overflow.size() < 100)
+                    else if (m_overflow.size() < 100)
                     {
                         char buf[100];
                         size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                         // read will be > 0
                         std::copy(buf, buf+read,
-                                  std::back_inserter(_overflow));
+                                  std::back_inserter(m_overflow));
                     }
                     else
                     {
@@ -1097,14 +1097,14 @@ namespace httpd
 
                 case CHUNK_STATE::READING_CHUNK_BODY:
                 {
-                    if (!_overflow.empty())
+                    if (!m_overflow.empty())
                     {
                         size_t to_erase = 
-                            std::min(_overflow.size(), 
+                            std::min(m_overflow.size(), 
                                      static_cast<unsigned long>(m_chunk_size - m_chunk_read));
-                        _overflow.erase(_overflow.begin(), 
-                                        _overflow.begin() + to_erase);
-                        _total_read += to_erase;
+                        m_overflow.erase(m_overflow.begin(), 
+                                         m_overflow.begin() + to_erase);
+                        m_total_read += to_erase;
                         m_chunk_read += to_erase;
                     }
 
@@ -1121,7 +1121,7 @@ namespace httpd
                                  static_cast<unsigned long>(m_chunk_size - m_chunk_read));
                     size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                     m_chunk_read += read;
-                    _total_read += read;
+                    m_total_read += read;
 
                     if (m_chunk_read == m_chunk_size)
                     {
@@ -1132,21 +1132,21 @@ namespace httpd
 
                 case CHUNK_STATE::READING_CHUNK_TERMINATOR:
                 {
-                    if (_overflow.size() < 2)
+                    if (m_overflow.size() < 2)
                     {
                         char buf[100];
                         size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                         // read will be > 0
                         std::copy(buf, buf+read,
-                                  std::back_inserter(_overflow));
+                                  std::back_inserter(m_overflow));
                     }
-                    if (_overflow.size() > 1)
+                    if (m_overflow.size() > 1)
                     {
-                        if (_overflow[0] == '\r' &&
-                            _overflow[1] == '\n')
+                        if (m_overflow[0] == '\r' &&
+                            m_overflow[1] == '\n')
                         {
-                            _overflow.pop_front();
-                            _overflow.pop_front();
+                            m_overflow.pop_front();
+                            m_overflow.pop_front();
                             m_chunk_state = CHUNK_STATE::READING_CHUNK_HEADER;
                         }
                         else
@@ -1160,21 +1160,21 @@ namespace httpd
 
                 case CHUNK_STATE::READING_END:
                 {
-                    if (_overflow.size() < 2)
+                    if (m_overflow.size() < 2)
                     {
                         char buf[100];
                         size_t read = read_from_socket(buf, sizeof(buf), _timer, timeoutMs);
                         // read will be > 0
                         std::copy(buf, buf+read,
-                                  std::back_inserter(_overflow));
+                                  std::back_inserter(m_overflow));
                     }
-                    if (_overflow.size() == 2)
+                    if (m_overflow.size() == 2)
                     {
-                        if (_overflow[0] == '\r' &&
-                            _overflow[1] == '\n')
+                        if (m_overflow[0] == '\r' &&
+                            m_overflow[1] == '\n')
                         {
-                            _overflow.pop_front();
-                            _overflow.pop_front();
+                            m_overflow.pop_front();
+                            m_overflow.pop_front();
                             m_chunk_state = CHUNK_STATE::DONE;
                         }
                         else
@@ -1183,7 +1183,7 @@ namespace httpd
                             throw http_exception("invalid chunk terminator");
                         }
                     }
-                    else if (_overflow.size() > 2)
+                    else if (m_overflow.size() > 2)
                     {
                         LOG_WARN("received data after final chunk terminator");
                         throw http_exception("invalid chunk end terminator");
@@ -1224,12 +1224,12 @@ namespace httpd
             bool done = false;
             do
             {
-                if (_ctx->should_shutdown())
+                if (m_ctx->should_shutdown())
                 {
                     throw http_exception("server shutdown");
                 }
         
-                if (_ctx->timed_out())
+                if (m_ctx->timed_out())
                 {
                     throw http_exception("operation timeout");
                 }
@@ -1245,7 +1245,7 @@ namespace httpd
                 bool write_flag = !reading;
                 bool error_flag = true;
                 int poll_status = 
-                    _ctx->conn()->poll(read_flag, write_flag, error_flag, 100);
+                    m_ctx->conn()->poll(read_flag, write_flag, error_flag, 100);
                 if (poll_status < 0)
                 {
                     LOG_WARN_ERRNO("Poll error", errno);
@@ -1272,7 +1272,7 @@ namespace httpd
             ssize_t read;
     
             auto status = 
-                _ctx->conn()->read(buf, len, read);
+                m_ctx->conn()->read(buf, len, read);
             switch (status)
             {
             case owl::connection::CONNECTION_ERROR:
