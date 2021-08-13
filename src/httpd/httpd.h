@@ -9,22 +9,22 @@
 #include <ostream>
 #include <deque>
 #include <unordered_set>
-#include "component.h"
+#include <owl/component.h>
+#include <owl/connection.h>
+#include <owl/time_utils.h>
+#include <owl/nillable.h>
 #include "http_request.h"
 #include "http_response.h"
 #include "http_auth.h"
-#include "connection.h"
-#include "time_utils.h"
-#include "nillable.h"
 
-namespace owl
+namespace httpd
 {
 
     class component;
 
     class controller;
 
-    class httpd : public component
+    class httpd : public owl::component
     {
     public:
 
@@ -119,12 +119,12 @@ namespace owl
 
             PROTOCOL protocol = PROTOCOL::HTTP;
             int port = 80;
-            std::shared_ptr<connection> conn;
+            std::shared_ptr<owl::connection> conn;
         };
 
         void start_listeners();
 
-        std::shared_ptr<thread_pool> handler_thread_pool;
+        std::shared_ptr<owl::thread_pool> handler_thread_pool;
         std::unordered_map<std::string, controller*> controller_map;
         controller* m_default_controller = nullptr;
         std::string m_realm;
@@ -142,21 +142,21 @@ namespace owl
         std::mutex m_log_lock;
         std::deque<std::string> m_cgi_log;
     
-        std::map<int, std::tuple<std::shared_ptr<connection>, struct sockaddr_in, socklen_t>> m_socket_map;
+        std::map<int, std::tuple<std::shared_ptr<owl::connection>, struct sockaddr_in, socklen_t>> m_socket_map;
 
         void log(http_context & ctx, const std::string & date);
 
-        bool accept(std::shared_ptr<connection> conn);
+        bool accept(std::shared_ptr<owl::connection> conn);
         
-        bool shutdown(std::shared_ptr<connection> conn);
+        bool shutdown(std::shared_ptr<owl::connection> conn);
 
-        void shutdown_write_async(std::shared_ptr<connection> conn);
+        void shutdown_write_async(std::shared_ptr<owl::connection> conn);
         
-        void put_back_connection(std::shared_ptr<connection> conn,
+        void put_back_connection(std::shared_ptr<owl::connection> conn,
                                  const sockaddr_in & addr, 
                                  socklen_t addr_len);
 
-        void handle_request(std::shared_ptr<connection> conn, 
+        void handle_request(std::shared_ptr<owl::connection> conn, 
                             const struct sockaddr_in & addr, 
                             socklen_t addr_len);
     

@@ -10,12 +10,12 @@
 #include <openssl/md5.h>
 #include <time.h>
 #include <stdlib.h>
-#include "log.h"
-#include "base64.h"
-#include "string_utils.h"
+#include <owl/log.h>
+#include <owl/base64.h>
+#include <owl/string_utils.h>
 #include "http_auth.h"
 
-namespace owl
+namespace httpd
 {
     enum http_auth_digest_type {
         HTTP_AUTH_DIGEST_NONE       = 0
@@ -493,8 +493,8 @@ namespace owl
 
             std::string key = part.substr(0, pos);
             std::string value = part.substr(pos+1);
-            trim(key, " ");
-            trim(value, "\" ");
+            owl::trim(key, " ");
+            owl::trim(value, "\" ");
 
             if (key == "username")
             {
@@ -700,7 +700,7 @@ namespace owl
         // base 64 decode the credentials
         std::string buf;
         // Base64 decode the basic auth string
-        if (!from64tobits(part, buf))
+        if (!owl::from64tobits(part, buf))
         {
             LOG_ERROR("Failed to base64 decode HTTP Basic auth header");
             ctx.response().add_header("WWW-Authenticate", "Basic");

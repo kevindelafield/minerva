@@ -1,15 +1,15 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <owl/controller.h>
 #include <owl/json_utils.h>
-#include <owl/http_context.h>
 #include <owl/component.h>
+#include <httpd/http_context.h>
+#include <httpd/controller.h>
 
 namespace www
 {
 
-    class file_server : public owl::component, public owl::controller
+    class file_server : public owl::component, public httpd::controller
     {
     public:
         file_server() = default;
@@ -37,7 +37,7 @@ namespace www
         bool auth_callback(const std::string & user,
                            const std::string & op) override;
 
-        void handle_request(owl::http_context & ctx, const std::string & op) override;
+        void handle_request(httpd::http_context & ctx, const std::string & op) override;
 
     private:
         std::string m_root_dir;

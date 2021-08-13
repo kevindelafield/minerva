@@ -8,11 +8,11 @@
 #include <mutex>
 #include <owl/log.h>
 #include <owl/component_visor.h>
-#include <owl/httpd.h>
 #include <owl/ssl_connection.h>
 #include <owl/file_utils.h>
 #include <owl/json_utils.h>
 #include <owl/exec_utils.h>
+#include <httpd/httpd.h>
 #include <authdb/auth_db.h>
 #include "file_server.h"
 #include "settings.h"
@@ -83,7 +83,7 @@ static void hup_handler(int signal)
                           }
 
                           auto httpd =
-                              kv().get_component<owl::httpd>(owl::httpd::NAME);
+                              kv().get_component<httpd::httpd>(httpd::httpd::NAME);
 
                           if (!httpd)
                           {
@@ -100,14 +100,14 @@ static void hup_handler(int signal)
                           {
                               int port = config["http.port"].asInt();
                               LOG_INFO("adding http port: " << port);
-                              httpd->add_listener(owl::httpd::PROTOCOL::HTTP, port);
+                              httpd->add_listener(httpd::httpd::PROTOCOL::HTTP, port);
                           }
                           
                           if (config.isMember("https.port") && config["https.port"].isInt());
                           {
                               int port = config["https.port"].asInt();
                               LOG_INFO("adding https port: " << port);
-                              httpd->add_listener(owl::httpd::PROTOCOL::HTTPS, port);
+                              httpd->add_listener(httpd::httpd::PROTOCOL::HTTPS, port);
                           }
                           
                           kv().hup();
@@ -193,7 +193,7 @@ int main(int argc, char** argv)
     owl::ssl_connection::init(cert_file.c_str(), key_file.c_str());
 
     // build compponents
-    auto k1 = std::make_shared<owl::httpd>();
+    auto k1 = std::make_shared<httpd::httpd>();
     assert(k1);
     auto k2 = std::make_shared<file_server>();
     assert(k2);
@@ -218,13 +218,13 @@ int main(int argc, char** argv)
     if (config.isMember("http.port") && config["http.port"].isInt())
     {
         int port = config["http.port"].asInt();
-        k1->add_listener(owl::httpd::PROTOCOL::HTTP, port);
+        k1->add_listener(httpd::httpd::PROTOCOL::HTTP, port);
     }
     
     if (config.isMember("https.port") && config["https.port"].isInt());
     {
         int port = config["https.port"].asInt();
-        k1->add_listener(owl::httpd::PROTOCOL::HTTPS, port);
+        k1->add_listener(httpd::httpd::PROTOCOL::HTTPS, port);
     }
 
     k1 = nullptr;

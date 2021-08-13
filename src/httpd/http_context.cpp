@@ -5,7 +5,7 @@
 #include <mutex>
 #include "http_context.h"
 
-namespace owl
+namespace httpd
 {
     static std::mutex _lock;
 

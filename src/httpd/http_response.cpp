@@ -3,7 +3,7 @@
 #include "http_exception.h"
 #include "http_content_type.h"
 
-namespace owl
+namespace httpd
 {
 
     std::string http_response::get_status_code_string(http_response_code code)
@@ -104,25 +104,25 @@ namespace owl
                 auto status = _ctx->conn()->write(buf + total, left, sent);
                 switch (status)
                 {
-                case connection::CONNECTION_ERROR:
+                case owl::connection::CONNECTION_ERROR:
                 {
                     LOG_DEBUG_ERRNO("Http client timeout or socketwrite error",
                                     errno);
                     return false;
                 }
                 break;
-                case connection::CONNECTION_OK:
+                case owl::connection::CONNECTION_OK:
                 {
                     writing = true;
                     total += sent;
                 }
                 break;
-                case connection::CONNECTION_WANTS_WRITE:
+                case owl::connection::CONNECTION_WANTS_WRITE:
                 {
                     writing = true;
                 }
                 break;
-                case connection::CONNECTION_WANTS_READ:
+                case owl::connection::CONNECTION_WANTS_READ:
                 {
                     writing = false;
                 }

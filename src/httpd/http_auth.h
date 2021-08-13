@@ -4,7 +4,7 @@
 #include "http_context.h"
 #include "http_request.h"
 
-namespace owl
+namespace httpd
 {
     class http_auth_user
     {

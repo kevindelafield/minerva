@@ -4,12 +4,12 @@
 #include <fcntl.h>
 #include <jsoncpp/json/json.h>
 #include <owl/component_visor.h>
-#include <owl/httpd.h>
-#include <owl/http_request.h>
-#include <owl/http_response.h>
 #include <owl/string_utils.h>
 #include <owl/file_utils.h>
 #include <owl/log.h>
+#include <httpd/http_request.h>
+#include <httpd/http_response.h>
+#include <httpd/httpd.h>
 #include "file_server.h"
 
 namespace www
@@ -17,7 +17,7 @@ namespace www
 
     void file_server::initialize()
     {
-        auto svr = get_component<owl::httpd>(owl::httpd::NAME);
+        auto svr = get_component<httpd::httpd>(httpd::httpd::NAME);
         if (svr)
         {
             svr->register_default_controller(this);
@@ -65,7 +65,7 @@ namespace www
         return false;
     }
 
-    void file_server::handle_request(owl::http_context & ctx, const std::string & op)
+    void file_server::handle_request(httpd::http_context & ctx, const std::string & op)
     {
         ctx.response().add_header("Pragma", "no-cache");
         ctx.response().add_header("Cache-Control", "no-cache");

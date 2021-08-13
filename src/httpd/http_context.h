@@ -2,13 +2,13 @@
 
 #include <cstring>
 #include <functional>
+#include <owl/time_utils.h>
+#include <owl/nillable.h>
+#include <owl/connection.h>
 #include "http_request.h"
 #include "http_response.h"
-#include "connection.h"
-#include "time_utils.h"
-#include "nillable.h"
 
-namespace owl
+namespace httpd
 {
     class http_context
     {
@@ -16,7 +16,7 @@ namespace owl
         const int DEFAULT_TIMEOUT = 60000;
         http_request _request;
         http_response _response;
-        std::shared_ptr<connection> _conn;
+        std::shared_ptr<owl::connection> _conn;
         std::string m_username;
         std::string m_client_ip;
         struct sockaddr_in m_client_addr;
@@ -24,11 +24,11 @@ namespace owl
         int _timeout_msecs = DEFAULT_TIMEOUT;
         owl::timer _timer;
         std::function<bool()> _sd_cb;
-        nillable<std::function<void()>> m_post_command;
+        owl::nillable<std::function<void()>> m_post_command;
 
     public:
 
-    http_context(std::shared_ptr<connection> conn, std::function<bool()> sdCb)
+        http_context(std::shared_ptr<owl::connection> conn, std::function<bool()> sdCb)
         : _request(this), _response(this), _conn(conn), _timer(true),
             _sd_cb(sdCb)
             {
@@ -37,7 +37,7 @@ namespace owl
 
         ~http_context() = default;
 
-        nillable<std::function<void()>> post_command() const
+        owl::nillable<std::function<void()>> post_command() const
         {
             return m_post_command;
         }
@@ -71,7 +71,7 @@ namespace owl
             return m_username;
         }
 
-        void post_command(const nillable<std::function<void()>> & cmd)
+        void post_command(const owl::nillable<std::function<void()>> & cmd)
         {
             m_post_command = cmd;
         }
@@ -86,7 +86,7 @@ namespace owl
             return _response;
         }
 
-        std::shared_ptr<connection> conn() const
+        std::shared_ptr<owl::connection> conn() const
         {
             return _conn;
         }

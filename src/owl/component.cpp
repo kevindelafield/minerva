@@ -5,7 +5,6 @@
 #include <functional>
 #include <chrono>
 #include "component.h"
-#include "httpd.h"
 #include "log.h"
 #include "component_visor.h"
 

@@ -1,11 +1,11 @@
 #include <string>
 #include <istream>
 #include <fstream>
+#include <owl/string_utils.h>
 #include "controller.h"
 #include "http_context.h"
-#include "string_utils.h"
 
-namespace owl
+namespace httpd
 {
 
     void controller::handle_request(http_context & ctx,
@@ -95,35 +95,35 @@ namespace owl
         if (index != std::string::npos)
         {
             std::string ext = filename.substr(index+1);
-            if (ci_equals(ext, "jpg") || ci_equals(ext, "jpeg"))
+            if (owl::ci_equals(ext, "jpg") || owl::ci_equals(ext, "jpeg"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_IMAGE_JPEG;
             }
-            else if (ci_equals(ext, "html") || ci_equals(ext, "html"))
+            else if (owl::ci_equals(ext, "html") || owl::ci_equals(ext, "html"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_HTML;
             }
-            else if (ci_equals(ext, "txt") || ci_equals(ext, "log"))
+            else if (owl::ci_equals(ext, "txt") || owl::ci_equals(ext, "log"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_PLAIN;
             }
-            else if (ci_equals(ext, "xml"))
+            else if (owl::ci_equals(ext, "xml"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_APPLICATION_XML;
             }
-            else if (ci_equals(ext, "json"))
+            else if (owl::ci_equals(ext, "json"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_APPLICATION_JSON;
             }
-            else if (ci_equals(ext, "js"))
+            else if (owl::ci_equals(ext, "js"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_JAVASCRIPT;
             }
-            else if (ci_equals(ext, "png"))
+            else if (owl::ci_equals(ext, "png"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_IMAGE_PNG;
             }
-            else if (ci_equals(ext, "css"))
+            else if (owl::ci_equals(ext, "css"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_CSS;
             }

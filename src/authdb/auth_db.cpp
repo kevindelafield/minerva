@@ -50,7 +50,7 @@ namespace authdb
                 return false;
             }
 
-            _user_map[user] = http_auth_user(user, realm, hash);
+            _user_map[user] = httpd::http_auth_user(user, realm, hash);
 
             std::getline(is, line);
         }
@@ -59,7 +59,7 @@ namespace authdb
     }
 
     bool auth_db::find_user(const std::string & username,
-                                http_auth_user & user)
+                            httpd::http_auth_user & user)
     {
         assert(_initialized);
 
@@ -108,9 +108,9 @@ namespace authdb
 
         std::unique_lock<std::mutex> lk(_lock);
 
-        std::string hash = digest_hash_md5(username, realm, password);
+        std::string hash = httpd::digest_hash_md5(username, realm, password);
 
-        _user_map[username] = http_auth_user(username, realm, hash);
+        _user_map[username] = httpd::http_auth_user(username, realm, hash);
 
         if (!write_map())
         {

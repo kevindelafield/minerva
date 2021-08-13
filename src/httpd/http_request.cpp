@@ -2,13 +2,14 @@
 #include <regex>
 #include <cassert>
 #include <curl/curl.h>
+#include <owl/connection.h>
+#include <owl/log.h>
+#include <owl/time_utils.h>
+#include <owl/string_utils.h>
 #include "http_context.h"
 #include "http_request.h"
-#include "connection.h"
-#include "log.h"
-#include "string_utils.h"
 
-namespace owl
+namespace httpd
 {
 
     static const char* firstLineRegex = "^(.+)\\s+(.+)\\s+HTTP/(1.0|1.1)\r$";
@@ -213,7 +214,7 @@ namespace owl
             m_headers[key] = value;
         
             // for content length - set it here
-            if (ci_equals(key, content_length))
+            if (owl::ci_equals(key, content_length))
             {
                 if (!is_number(value))
                 {
@@ -253,23 +254,23 @@ namespace owl
             }
         
             // for content type - set it here
-            else if (ci_equals(key, content_type))
+            else if (owl::ci_equals(key, content_type))
             {
                 m_content_type = http_content_type::parse(value);
             }
             // for connection - set it here
-            else if (ci_equals(key, connectionKey))
+            else if (owl::ci_equals(key, connectionKey))
             {
-                m_keep_alive = ci_equals(value, keepAlive);
+                m_keep_alive = owl::ci_equals(value, keepAlive);
             }
             // for connection - set it here
-            else if (ci_equals(key, expectKey))
+            else if (owl::ci_equals(key, expectKey))
             {
-                m_continue_100 = ci_equals(value, continue100);
+                m_continue_100 = owl::ci_equals(value, continue100);
             }
-            else if (ci_equals(key, "transfer-encoding"))
+            else if (owl::ci_equals(key, "transfer-encoding"))
             {
-                if (ci_equals(value, "chunked"))
+                if (owl::ci_equals(value, "chunked"))
                 {
                     m_chunked = true;
                 }
@@ -1274,20 +1275,20 @@ namespace owl
                 _ctx->conn()->read(buf, len, read);
             switch (status)
             {
-            case connection::CONNECTION_ERROR:
+            case owl::connection::CONNECTION_ERROR:
             {
                 LOG_DEBUG_ERRNO("Http client timeout or socket read error",
                                 errno);
                 throw http_exception("read error");
             }
             break;
-            case connection::CONNECTION_CLOSED:
+            case owl::connection::CONNECTION_CLOSED:
             {
                 LOG_DEBUG("Http client disconnected unexpectedly");
                 throw http_exception("connection closed");
             }
             break;
-            case connection::CONNECTION_OK:
+            case owl::connection::CONNECTION_OK:
             {
                 if (read == 0)
                 {
@@ -1300,12 +1301,12 @@ namespace owl
                 }
                 break;
             }
-            case connection::CONNECTION_WANTS_READ:
+            case owl::connection::CONNECTION_WANTS_READ:
             {
                 reading = true;
             }
             break;
-            case connection::CONNECTION_WANTS_WRITE:
+            case owl::connection::CONNECTION_WANTS_WRITE:
             {
                 reading = false;
             }

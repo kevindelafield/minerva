@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace owl
+namespace httpd
 {
 
     class http_content_type

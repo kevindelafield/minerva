@@ -5,10 +5,10 @@
 #include <sstream>
 #include <vector>
 #include <tuple>
-#include "string_utils.h"
+#include <owl/string_utils.h>
 #include "http_content_type.h"
 
-namespace owl
+namespace httpd
 {
 
     class http_context;

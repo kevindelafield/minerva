@@ -8,12 +8,12 @@
 #include <istream>
 #include <streambuf>
 #include <deque>
-#include "string_utils.h"
-#include "time_utils.h"
+#include <owl/string_utils.h>
+#include <owl/time_utils.h>
 #include "http_content_type.h"
 #include "http_exception.h"
 
-namespace owl
+namespace httpd
 {
 
     class httpd;
@@ -51,7 +51,7 @@ namespace owl
             return false;
         }
 
-        const std::map<std::string, std::string, ci_less> & headers() const
+        const std::map<std::string, std::string, owl::ci_less> & headers() const
         {
             return m_headers;
         }
@@ -117,7 +117,7 @@ namespace owl
             return m_query_string;
         }
 
-        const std::map<std::string, std::string, ci_less> & query_parameters() const
+        const std::map<std::string, std::string, owl::ci_less> & query_parameters() const
         {
             return m_query_params;
         }
@@ -203,12 +203,12 @@ namespace owl
         bool _partial_read = false;
         size_t _total_read = 0;
         size_t m_offset;
-        std::map<std::string, std::string, ci_less> m_headers;
+        std::map<std::string, std::string, owl::ci_less> m_headers;
         METHOD m_method;
         bool m_http11;
         long long m_content_length;
         std::string m_path;
-        std::map<std::string, std::string, ci_less> m_query_params;
+        std::map<std::string, std::string, owl::ci_less> m_query_params;
         http_content_type::code m_content_type;
         std::string m_query_string;
         http_context * _ctx;
