@@ -5,8 +5,11 @@
 
 static void print_usage(char * bin)
 {
-    std::cout << "set user password usage: " << bin << " -s <realm> <user> <password> <db_file>";
-    std::cout << "delete user usage: " << bin << " -d <user> <db_file>";
+    std::cout << "set user password usage: " << bin <<
+        " -s <realm> <user> <password> <db_file>" <<
+        std::endl;
+    std::cout << "delete user usage: " << bin << " -d <user> <db_file>" <<
+        std::endl;
 }
 
 int main(int argc, char ** argv)
