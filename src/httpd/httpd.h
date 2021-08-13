@@ -39,8 +39,6 @@ namespace httpd
         
         constexpr static const char * CRLF = "\r\n";
     
-        constexpr static char DIGEST_REALM[] = "Alarm.com";
-
         const int handler_count = 5;
         const int max_queued_connections = 20;
         const int polling_period_ms = 500;
@@ -68,18 +66,6 @@ namespace httpd
 
         void register_default_controller(controller * controller);
         
-        void realm(const std::string & realm)
-        {
-            std::unique_lock<std::mutex> lk(lock);
-            m_realm = realm;
-        }
-
-        std::string realm()
-        {
-            std::unique_lock<std::mutex> lk(lock);
-            return m_realm;
-        }
-
         void auth_db(http_auth_db * db)
         {
             m_auth_db = db;
@@ -127,7 +113,6 @@ namespace httpd
         std::shared_ptr<owl::thread_pool> handler_thread_pool;
         std::unordered_map<std::string, controller*> controller_map;
         controller* m_default_controller = nullptr;
-        std::string m_realm;
         std::atomic<unsigned long long> m_active_count;
         std::atomic<unsigned long long> m_request_count;
         http_auth_db * m_auth_db = nullptr;

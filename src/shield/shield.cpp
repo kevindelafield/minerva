@@ -8,7 +8,7 @@ static void print_usage(char * bin)
     std::cout << "set user password usage: " << bin <<
         " -s <realm> <user> <password> <db_file>" <<
         std::endl;
-    std::cout << "delete user usage: " << bin << " -d <user> <db_file>" <<
+    std::cout << "delete user usage: " << bin << " -d <realm> <user> <db_file>" <<
         std::endl;
 }
 
@@ -35,7 +35,7 @@ int main(int argc, char ** argv)
         std::string password(argv[4]);
         std::string file(argv[5]);
 
-        authdb::auth_db db(file);
+        authdb::auth_db db(realm, file);
         if (!db.initialize())
         {
             LOG_ERROR("failed to load auth db");
@@ -52,16 +52,17 @@ int main(int argc, char ** argv)
     }
     else if (cmd == "-d")
     {
-        if (argc != 4)
+        if (argc != 5)
         {
             print_usage(argv[0]);
             return 1;
         }
 
-        std::string user(argv[2]);
-        std::string file(argv[3]);
+        std::string realm(argv[2]);
+        std::string user(argv[3]);
+        std::string file(argv[4]);
 
-        authdb::auth_db db(file);
+        authdb::auth_db db(realm, file);
         if (!db.initialize())
         {
             LOG_ERROR("failed to load auth db");

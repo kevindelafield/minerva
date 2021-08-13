@@ -204,12 +204,12 @@ int main(int argc, char** argv)
     
     if (config["webpass"].isString() && config["realm"].isString())
     {
-        authdb::auth_db auth_db(config["webpass"].asString());
+        authdb::auth_db auth_db(config["realm"].asString(),
+                                config["webpass"].asString());
         if (!auth_db.initialize())
         {
             FATAL("failed to initialize auth db");
         }
-        k1->realm(config["realm"].asString());
         k1->auth_db(&auth_db);
     }
 

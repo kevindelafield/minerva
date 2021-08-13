@@ -10,7 +10,9 @@ namespace authdb
     class auth_db : public httpd::http_auth_db
     {
     public:
-        auth_db(const std::string & webpass) : m_webpass(webpass)
+        auth_db(const std::string & realm,
+                const std::string & webpass) :
+            httpd::http_auth_db(realm), m_webpass(webpass)
         {
         }
         
@@ -30,9 +32,9 @@ namespace authdb
                        httpd::http_auth_user & user) override;
 
     private:
-        std::map<std::string, httpd::http_auth_user> _user_map;
-        std::mutex _lock;
-        bool _initialized = false;
+        std::map<std::string, httpd::http_auth_user> m_user_map;
+        std::mutex m_lock;
+        bool m_initialized = false;
         std::string m_webpass;
 
         bool write_map() const;

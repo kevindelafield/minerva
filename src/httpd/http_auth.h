@@ -14,7 +14,7 @@ namespace httpd
         http_auth_user(const std::string & username,
                        const std::string & realm,
                        const std::string & hash) :
-        _user(username), _realm(realm), _hash(hash)
+            m_user(username), m_realm(realm), m_hash(hash)
         {
         }
 
@@ -23,30 +23,37 @@ namespace httpd
 
         std::string user() const
         {
-            return _user;
+            return m_user;
         }
 
         std::string realm() const
         {
-            return _realm;
+            return m_realm;
         }
 
         std::string hash() const
         {
-            return _hash;
+            return m_hash;
         }
 
     private:
-        std::string _user;
-        std::string _realm;
-        std::string _hash;
+        std::string m_user;
+        std::string m_realm;
+        std::string m_hash;
     };
 
     class http_auth_db {
     public:
 
-        http_auth_db() = default;
+        http_auth_db(const std::string & realm) : m_realm(realm)
+        {
+        }
         ~http_auth_db() = default;
+
+        const std::string & realm() const
+        {
+            return m_realm;
+        }
 
         virtual bool initialize() {
             return true;
@@ -54,6 +61,9 @@ namespace httpd
 
         virtual bool find_user(const std::string & username,
                                http_auth_user & user) = 0;
+
+    private:
+        std::string m_realm;
     };
     
     constexpr const char * AUTH_HDR = "Authorization";

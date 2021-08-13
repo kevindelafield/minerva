@@ -10,9 +10,9 @@ namespace authdb
 {
     bool auth_db::initialize()
     {
-        std::unique_lock<std::mutex> lk(_lock);
+        std::unique_lock<std::mutex> lk(m_lock);
 
-        _user_map.clear();
+        m_user_map.clear();
 
         std::ifstream is(m_webpass);
 
@@ -50,7 +50,7 @@ namespace authdb
                 return false;
             }
 
-            _user_map[user] = httpd::http_auth_user(user, realm, hash);
+            m_user_map[user] = httpd::http_auth_user(user, realm, hash);
 
             std::getline(is, line);
         }
@@ -61,12 +61,12 @@ namespace authdb
     bool auth_db::find_user(const std::string & username,
                             httpd::http_auth_user & user)
     {
-        assert(_initialized);
+        assert(m_initialized);
 
-        std::unique_lock<std::mutex> lk(_lock);
+        std::unique_lock<std::mutex> lk(m_lock);
 
-        auto it = _user_map.find(username);
-        if (it != _user_map.end())
+        auto it = m_user_map.find(username);
+        if (it != m_user_map.end())
         {
             user = it->second;
             return true;
@@ -84,7 +84,7 @@ namespace authdb
             return false;
         }
 
-        for (auto & x : _user_map)
+        for (auto & x : m_user_map)
         {
             os << x.second.user() << ":" << x.second.realm() << ":" << x.second.hash() << std::endl;
         }
@@ -102,15 +102,15 @@ namespace authdb
                                const std::string & realm,
                                const std::string & password)
     {
-        assert(_initialized);
+        assert(m_initialized);
 
         LOG_DEBUG("setting web user: " << username);
 
-        std::unique_lock<std::mutex> lk(_lock);
+        std::unique_lock<std::mutex> lk(m_lock);
 
         std::string hash = httpd::digest_hash_md5(username, realm, password);
 
-        _user_map[username] = httpd::http_auth_user(username, realm, hash);
+        m_user_map[username] = httpd::http_auth_user(username, realm, hash);
 
         if (!write_map())
         {
@@ -123,17 +123,17 @@ namespace authdb
 
     bool auth_db::delete_user(const std::string & username)
     {
-        assert(_initialized);
+        assert(m_initialized);
 
-        std::unique_lock<std::mutex> lk(_lock);
+        std::unique_lock<std::mutex> lk(m_lock);
 
-        auto it = _user_map.find(username);
-        if (it == _user_map.end())
+        auto it = m_user_map.find(username);
+        if (it == m_user_map.end())
         {
             return true;
         }
 
-        _user_map.erase(it);
+        m_user_map.erase(it);
 
         if (!write_map())
         {
@@ -146,11 +146,11 @@ namespace authdb
 
     bool auth_db::clear()
     {
-        assert(_initialized);
+        assert(m_initialized);
 
-        std::unique_lock<std::mutex> lk(_lock);
+        std::unique_lock<std::mutex> lk(m_lock);
 
-        _user_map.clear();
+        m_user_map.clear();
 
         if (!write_map())
         {

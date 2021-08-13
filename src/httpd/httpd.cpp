@@ -23,8 +23,7 @@
 namespace httpd
 {
 
-    httpd::httpd() : m_realm(DIGEST_REALM),
-                     m_active_count(0),
+    httpd::httpd() : m_active_count(0),
                      m_request_count(0)
     {
     }
@@ -559,7 +558,7 @@ namespace httpd
         // digest header check
         bool success = authenticate_digest(ctx,
                                            auth_header,
-                                           realm(),
+                                           m_auth_db->realm(),
                                            *m_auth_db,
                                            user);
         // basic header check
@@ -568,7 +567,7 @@ namespace httpd
             success = 
                 authenticate_basic(ctx,
                                    auth_header,
-                                   realm(),
+                                   m_auth_db->realm(),
                                    *m_auth_db,
                                    user);
         }
