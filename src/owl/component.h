@@ -17,25 +17,6 @@ namespace owl
 
     class component
     {
-    private:
-        friend class component_visor;
-        std::mutex shutdown_mutex;
-        std::condition_variable shutdown_cond;
-        std::shared_ptr<component> get_component_internal(const std::string & name) const;
-            
-    protected:
-        
-        std::mutex lock;
-        std::condition_variable cond;
-        
-        std::shared_ptr<thread_pool> add_thread_pool(int count);
-
-        void add_thread(std::function<void()>);
-        
-        scheduler::job_handle schedule_job(scheduler::job_element job, int ms);
-        
-        bool cancel_job(const scheduler::job_handle & handle);
-
     public:
         component() = default;
         
@@ -73,5 +54,25 @@ namespace owl
         void set_setting(const std::string & name, const Json::Value & value);
 
         bool save_settings();
+
+    protected:
+        
+        std::mutex lock;
+        std::condition_variable cond;
+        
+        std::shared_ptr<thread_pool> add_thread_pool(int count);
+
+        void add_thread(std::function<void()>);
+        
+        scheduler::job_handle schedule_job(scheduler::job_element job, int ms);
+        
+        bool cancel_job(const scheduler::job_handle & handle);
+
+    private:
+        friend class component_visor;
+        std::mutex m_shutdown_mutex;
+        std::condition_variable m_shutdown_cond;
+        std::shared_ptr<component> get_component_internal(const std::string & name) const;
+            
     };
 }

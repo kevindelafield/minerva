@@ -59,9 +59,9 @@ namespace owl
 
     void component::stop()
     {
-        shutdown_mutex.lock();
-        shutdown_cond.notify_all();
-        shutdown_mutex.unlock();
+        m_shutdown_mutex.lock();
+        m_shutdown_cond.notify_all();
+        m_shutdown_mutex.unlock();
 
         lock.lock();
         cond.notify_all();
