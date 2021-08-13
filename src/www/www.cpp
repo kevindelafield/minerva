@@ -202,14 +202,14 @@ int main(int argc, char** argv)
     kv().add(k1);
     kv().add(k2);
     
-    if (config["webpass"].isString())
+    if (config["webpass"].isString() && config["realm"].isString())
     {
         authdb::auth_db auth_db(config["webpass"].asString());
         if (!auth_db.initialize())
         {
             FATAL("failed to initialize auth db");
         }
-        k1->realm("minerva.com");
+        k1->realm(config["realm"].asString());
         k1->auth_db(&auth_db);
     }
 
