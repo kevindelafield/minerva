@@ -555,23 +555,25 @@ namespace httpd
         std::string auth_header;
         ctx.request().header(AUTH_HDR, auth_header);
 
-        // digest header check
-        bool success = authenticate_digest(ctx,
-                                           auth_header,
-                                           m_auth_db->realm(),
-                                           *m_auth_db,
-                                           user);
         // basic header check
+        bool success =
+            authenticate_basic(ctx,
+                               auth_header,
+                               m_auth_db->realm(),
+                               *m_auth_db,
+                               user);
+
+        // digest header check
         if (!success)
         {
             success = 
-                authenticate_basic(ctx,
-                                   auth_header,
-                                   m_auth_db->realm(),
-                                   *m_auth_db,
-                                   user);
+                authenticate_digest(ctx,
+                                    auth_header,
+                                    m_auth_db->realm(),
+                                    *m_auth_db,
+                                    user);
         }
-
+        
         if (success)
         {
             LOG_DEBUG("authenticated request");
