@@ -1,6 +1,5 @@
 #include <unistd.h>
 #include <stdio.h>
-#include "locks.h"
 #include "unique_command.h"
 #include "log.h"
 #include "safe_ofstream.h"
@@ -28,12 +27,6 @@ namespace owl
         }
         flush();
         close();
-
-        owl::shared_lock.lock_shared();
-        unique_command cmd([]()
-                           {
-                               shared_lock.unlock_shared();
-                           });
 
         sync();
 
