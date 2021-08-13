@@ -70,7 +70,7 @@ namespace owl
     protected:
         static time_point get_time_now();
 
-    protected:
+    private:
         time_point start_time;
         time_point stop_time;
         bool m_is_running;

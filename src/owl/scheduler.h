@@ -15,6 +15,7 @@ namespace owl
     class scheduler
     {
     public:
+
         typedef std::function<void()> job_element;
 
     private:
@@ -44,6 +45,7 @@ namespace owl
         void run();
 
     public:
+
         scheduler(int threads = 5);
         virtual ~scheduler();
 

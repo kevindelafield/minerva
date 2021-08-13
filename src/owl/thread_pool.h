@@ -15,17 +15,6 @@ namespace owl
     public:
         typedef std::function<void()> work_element;
 
-    private:
-        volatile bool should_shutdown;
-        bool running;
-        std::queue<work_element> work_items;
-        std::set<std::thread*> threads;
-        std::mutex lock;
-        std::condition_variable cond;
-        void run();
-        int thread_count;
-
-    public:
         thread_pool(int count);
         virtual ~thread_pool();
 
@@ -38,5 +27,15 @@ namespace owl
         void start();
         void stop();
         void wait();
+
+    private:
+        volatile bool should_shutdown;
+        bool running;
+        std::queue<work_element> work_items;
+        std::set<std::thread*> threads;
+        std::mutex lock;
+        std::condition_variable cond;
+        void run();
+        int thread_count;
     };
 }
