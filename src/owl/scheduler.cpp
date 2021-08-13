@@ -80,10 +80,7 @@ namespace owl
         // wait for a signal or until the next job is scheduled
         if (next_run > now)
         {
-            auto duration =
-                std::chrono::duration_cast<std::chrono::nanoseconds>(next_run - now);
-
-            cond.wait_for(lk, duration);
+            cond.wait_for(lk, next_run - now + std::chrono::microseconds(1));
         }
     }
 
