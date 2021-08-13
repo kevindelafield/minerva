@@ -8,4 +8,4 @@ FILE (GLOB APP_SRC "*.cpp")
 
 add_executable(www ${APP_SRC} ${APP_INCLUDE})
 
-target_link_libraries(www owl authdb)
+target_link_libraries(www httpd authdb owl)
