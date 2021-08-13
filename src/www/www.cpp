@@ -202,15 +202,17 @@ int main(int argc, char** argv)
     kv().add(k1);
     kv().add(k2);
     
+    authdb::auth_db * auth_db = nullptr;
+    
     if (config["webpass"].isString() && config["realm"].isString())
     {
-        authdb::auth_db auth_db(config["realm"].asString(),
-                                config["webpass"].asString());
-        if (!auth_db.initialize())
+        auth_db = new authdb::auth_db(config["realm"].asString(),
+                                      config["webpass"].asString());
+        if (!auth_db->initialize())
         {
             FATAL("failed to initialize auth db");
         }
-        k1->auth_db(&auth_db);
+        k1->auth_db(auth_db);
     }
 
     k2->config(config);
@@ -253,6 +255,11 @@ int main(int argc, char** argv)
     kv().clear();
     
     owl::ssl_connection::destroy();
+
+    if (auth_db)
+    {
+        delete(auth_db);
+    }
 
     LOG_INFO("exiting");
     

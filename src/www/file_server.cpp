@@ -48,7 +48,7 @@ namespace www
             FATAL("www default file does not exist: " << def_file);
         }
 
-        require_authorization(false);
+        require_authorization(true);
     }
 
     bool file_server::auth_callback(const std::string & user,

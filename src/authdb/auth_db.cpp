@@ -55,6 +55,8 @@ namespace authdb
             std::getline(is, line);
         }
 
+        m_initialized = true;
+
         return true;
     }
 
