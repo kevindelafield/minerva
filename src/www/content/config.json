@@ -1,7 +1,0 @@
-{
-    "www_root_dir" : "/www/root",
-    "cert_file" : "/www/certs/cert.pem",
-    "key_file" : "/www/certs/key.pem",
-    "www_default_file" : "index.html",
-    "settings_file_name" : "/www/config/www.json"
-}
