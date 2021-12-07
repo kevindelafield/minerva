@@ -25,8 +25,7 @@ owl::component_visor & kv()
     return kv;
 }
 
-static volatile bool stopped = false;
-static volatile bool resetting = false;
+static bool stopped = false;
 static std::string config_file;
 static std::mutex hup_mutex;
 
