@@ -79,7 +79,11 @@ namespace owl
 
         bool reuse_addr(bool reuse);
 
-        bool bind(int port);
+        bool reuse_addr6(bool reuse);
+
+        bool ipv6_only(bool only);
+
+        bool bind(const struct sockaddr * addr, socklen_t len);
 
         bool listen(int backlog);
     
@@ -93,9 +97,7 @@ namespace owl
             return CONNECTION_OK;
         }
 
-        bool set_blocking();
-    
-        bool set_nonblocking();
+        bool set_blocking(bool block);
     
         virtual bool connect(const struct sockaddr * addr,
                              const socklen_t addr_len);

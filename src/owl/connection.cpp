@@ -125,7 +125,7 @@ namespace owl
         return true;
     }
 
-    bool connection::set_blocking()
+    bool connection::set_blocking(bool block)
     {
         int flags = fcntl(socket, F_GETFL, 0);
         if (flags < 0)
@@ -134,27 +134,14 @@ namespace owl
             return false;
         }
 
-        flags &= ~O_NONBLOCK;
-
-        flags = fcntl(socket, F_SETFL, flags) != -1;
-        if (flags < 0)
+        if (block)
         {
-            LOG_ERROR_ERRNO("fcntl failed", errno);
-            return false;
+            flags &= ~O_NONBLOCK;
         }
-        return true;
-    }
-
-    bool connection::set_nonblocking()
-    {
-        int flags = fcntl(socket, F_GETFL, 0);
-        if (flags < 0)
+        else
         {
-            LOG_ERROR_ERRNO("fcntl failed", errno);
-            return false;
+            flags |= O_NONBLOCK;
         }
-
-        flags |= O_NONBLOCK;
 
         flags = fcntl(socket, F_SETFL, flags) != -1;
         if (flags < 0)
@@ -176,16 +163,32 @@ namespace owl
         return true;
     }
 
-    bool connection::bind(int port)
+    bool connection::reuse_addr6(bool reuse)
+    {
+        int enable = reuse;
+        if (setsockopt(socket, SOL_IPV6, SO_REUSEADDR, &enable, sizeof(enable)))
+        {
+            LOG_ERROR_ERRNO("setsockopt failed", errno);
+            return false;
+        }
+        return true;
+    }
+
+    bool connection::ipv6_only(bool only)
+    {
+        int enable = only;
+        if (setsockopt(socket, SOL_IPV6, IPV6_V6ONLY, &enable, sizeof(enable)))
+        {
+            LOG_ERROR_ERRNO("setsockopt failed", errno);
+            return false;
+        }
+        return true;
+    }
+
+    bool connection::bind(const struct sockaddr * addr, socklen_t len)
     {
         // bind
-        struct sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = INADDR_ANY;
-        addr.sin_port = htons(port);
-    
-        if (::bind(socket, (struct sockaddr *)&addr, sizeof(addr)))
+        if (::bind(socket, addr, len))
         {
             LOG_ERROR_ERRNO("bind failed", errno);
             return false;

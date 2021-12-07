@@ -81,12 +81,12 @@ namespace httpd
             if (listener.protocol == httpd::PROTOCOL::HTTP)
             {
                 conn =
-                    std::make_shared<owl::connection>(AF_INET,
-                                                 SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+                    std::make_shared<owl::connection>(AF_INET6,
+                                                      SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
             }
             else if (listener.protocol == httpd::PROTOCOL::HTTPS)
             {
-                conn = std::dynamic_pointer_cast<owl::connection>(std::make_shared<owl::ssl_connection>(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+                conn = std::dynamic_pointer_cast<owl::connection>(std::make_shared<owl::ssl_connection>(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
             }
             else
             {
@@ -98,7 +98,24 @@ namespace httpd
             {
                 FATAL_ERRNO("Failed to reuse address", errno);
             }
-            if (!conn->bind(listener.port))
+            if (!conn->reuse_addr6(true))
+            {
+                FATAL_ERRNO("Failed to reuse address 6", errno);
+            }
+            if (!conn->ipv6_only(false))
+            {
+                FATAL_ERRNO("Failed to set ipv6 only", errno);
+            }
+
+            static struct in6_addr any6addr = IN6ADDR_ANY_INIT;
+
+            struct sockaddr_in6 addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin6_family = AF_INET6;
+            addr.sin6_addr = any6addr;
+            addr.sin6_port = htons(listener.port);
+    
+            if (!conn->bind((const sockaddr *)&addr, sizeof(addr)))
             {
                 FATAL_ERRNO("Failed to bind to port " << listener.port, errno);
             }
