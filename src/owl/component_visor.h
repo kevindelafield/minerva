@@ -23,7 +23,7 @@ namespace owl
         constexpr static char SETTINGS_FILE_KEY[] = "settings_file_name";
 
         std::vector<std::function<void()>> _thread_functions;
-        std::map<std::string, std::shared_ptr<component>> components;
+        std::map<std::string, std::unique_ptr<component>> components;
         std::set<std::thread*> threads;
         std::set<std::shared_ptr<thread_pool>> thread_pools;
         scheduler sched;
@@ -44,7 +44,7 @@ namespace owl
             return m_should_shutdown;
         }
 
-        void add(std::shared_ptr<component> cmp);
+        void add(component * cmp);
 
         scheduler::job_handle schedule_job(scheduler::job_element job, int milliseconds)
         {
@@ -69,16 +69,14 @@ namespace owl
         }
 
         template<class T>
-            std::shared_ptr<T> get_component(const std::string & name) const
+            T * get_component(const std::string & name) const
         {
-            std::shared_ptr<T> cmp;
-
             const auto & entry = components.find(name);
             if (entry != components.end())
             {
-                cmp = std::dynamic_pointer_cast<T>(entry->second);
+                return dynamic_cast<T*>(entry->second.get());
             }
-            return cmp;
+            return nullptr;
         }
 
         void clear();

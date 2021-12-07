@@ -193,9 +193,9 @@ int main(int argc, char** argv)
     owl::ssl_connection::init(cert_file.c_str(), key_file.c_str());
 
     // build compponents
-    auto k1 = std::make_shared<httpd::httpd>();
+    auto k1 = new httpd::httpd();
     assert(k1);
-    auto k2 = std::make_shared<file_server>();
+    auto k2 = new file_server();
     assert(k2);
     
     // add components

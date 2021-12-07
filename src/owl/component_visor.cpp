@@ -21,12 +21,12 @@ namespace owl
     {
     }
 
-    void component_visor::add(std::shared_ptr<component> cmp)
+    void component_visor::add(component * cmp)
     {
         assert(!running);
         assert(cmp);
         LOG_DEBUG("adding component: " << cmp->name());
-        components[cmp->name()] = cmp;
+        components[cmp->name()] = std::unique_ptr<component>(std::move(cmp));
         cmp->visor = this;
     }
 
@@ -44,11 +44,7 @@ namespace owl
     {
         Json::Value stats;
 
-        lock.lock();    
-        auto tmp = components;
-        lock.unlock();
-    
-        for (auto k : tmp)
+        for (auto const & k : components)
         {
             stats[k.first] = k.second->get_stats();
         }
@@ -59,9 +55,7 @@ namespace owl
     void component_visor::clear()
     {
         assert(!running);
-        lock.lock();
         components.clear();
-        lock.unlock();
     }
 
     void component_visor::initialize()
@@ -69,7 +63,7 @@ namespace owl
         assert(!running);
 
         std::for_each(components.begin(), components.end(),
-                      [](auto it) {
+                      [](auto & it) {
                           it.second->initialize();
                       });
     }
@@ -78,19 +72,15 @@ namespace owl
     {
         assert(!running);
 
-        lock.lock();    
-        auto tmp = components;
-        lock.unlock();
-    
         // start components
-        std::for_each(tmp.begin(), tmp.end(),
-                      [](auto it) {
+        std::for_each(components.begin(), components.end(),
+                      [](auto & it) {
                           it.second->start();
                       });
 
         // start threads
         std::for_each(_thread_functions.begin(), _thread_functions.end(),
-                  [this] (auto it) {
+                  [this] (auto & it) {
                       auto t = new std::thread(it);
                       assert(t);
                       this->threads.insert(t);
@@ -112,10 +102,6 @@ namespace owl
     {
         m_should_shutdown = true;
 
-        lock.lock();    
-        auto tmp = components;
-        lock.unlock();
-    
         sched.stop();
 
         std::for_each(threads.begin(), threads.end(),
@@ -128,8 +114,8 @@ namespace owl
                           pthread_kill(thread->native_handle(), SIGUSR2);
                       });
 
-        std::for_each(tmp.begin(), tmp.end(),
-                      [](auto it) {
+        std::for_each(components.begin(), components.end(),
+                      [](auto & it) {
                           it.second->stop();
                       });
         std::for_each(thread_pools.begin(), thread_pools.end(),
@@ -154,14 +140,10 @@ namespace owl
             }
         }
 
-        lock.lock();    
-        auto tmp = components;
-        lock.unlock();
-    
         sched.wait();
 
-        std::for_each(tmp.begin(), tmp.end(),
-                      [](auto it) {
+        std::for_each(components.begin(), components.end(),
+                      [](auto & it) {
                           it.second->wait();
                       });
 
@@ -186,7 +168,7 @@ namespace owl
         assert(!running);
 
         std::for_each(components.begin(), components.end(),
-                      [](auto it) {
+                      [](auto & it) {
                           it.second->release();
                       });
     }
@@ -200,7 +182,7 @@ namespace owl
 
         LOG_INFO("HUP");
         std::for_each(components.begin(), components.end(),
-                      [](auto it) {
+                      [](auto & it) {
                           it.second->hup();
                       });
     }

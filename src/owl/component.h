@@ -25,10 +25,10 @@ namespace owl
         component_visor* visor;
 
         template<class T>
-            std::shared_ptr<T> get_component(const std::string & name) const
+            T* get_component(const std::string & name) const
         {
             auto cmp = get_component_internal(name);
-            return std::dynamic_pointer_cast<T>(cmp);
+            return dynamic_cast<T*>(cmp);
         }
         
         bool should_shutdown() const;
@@ -72,7 +72,7 @@ namespace owl
         friend class component_visor;
         std::mutex m_shutdown_mutex;
         std::condition_variable m_shutdown_cond;
-        std::shared_ptr<component> get_component_internal(const std::string & name) const;
+        component * get_component_internal(const std::string & name) const;
             
     };
 }

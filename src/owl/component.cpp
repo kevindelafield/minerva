@@ -10,7 +10,7 @@
 
 namespace owl
 {
-    std::shared_ptr<component> component::get_component_internal(const std::string & name) const
+    component * component::get_component_internal(const std::string & name) const
     {
         return visor->get_component<component>(name);
     }
