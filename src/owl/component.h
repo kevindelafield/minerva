@@ -54,7 +54,7 @@ namespace owl
         
         util::thread_pool * add_thread_pool(int count);
 
-        void add_thread(std::function<void()>);
+        void add_thread(const std::function<void()> &);
         
         util::scheduler::job_handle schedule_job(const util::scheduler::job_element & job, int ms);
         

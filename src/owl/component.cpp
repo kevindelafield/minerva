@@ -26,7 +26,7 @@ namespace owl
         return visor->should_shutdown();
     }
     
-    void component::add_thread(std::function<void()> routine)
+    void component::add_thread(const std::function<void()> & routine)
     {
         visor->add_thread(routine);
     }

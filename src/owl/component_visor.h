@@ -54,7 +54,7 @@ namespace owl
             return sched.cancel_job(handle);
         }
 
-        void add_thread(std::function<void()> routine);
+        void add_thread(const std::function<void()> & routine);
 
         util::thread_pool * add_thread_pool(int count)
         {

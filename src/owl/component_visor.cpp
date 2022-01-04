@@ -29,7 +29,7 @@ namespace owl
         cmp->visor = this;
     }
 
-    void component_visor::add_thread(std::function<void()> fp)
+    void component_visor::add_thread(const std::function<void()> & fp)
     {
         std::unique_lock<std::mutex> lk(lock);
         
