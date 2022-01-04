@@ -28,7 +28,7 @@ namespace www
                     return false;
                 }
                 std::string log_str(argv[i]);
-                log_level = (owl::log::LOG_LEVEL)std::stoi(log_str);
+                log_level = (util::log::LOG_LEVEL)std::stoi(log_str);
             }
             else if (option == "-v")
             {

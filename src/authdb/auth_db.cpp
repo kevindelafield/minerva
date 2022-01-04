@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <fstream>
-#include <owl/safe_ofstream.h>
-#include <owl/log.h>
+#include <util/safe_ofstream.h>
+#include <util/log.h>
 #include "auth_db.h"
 
 using namespace owl;
@@ -78,7 +78,7 @@ namespace authdb
 
     bool auth_db::write_map() const
     {
-        safe_ofstream os(m_webpass);
+        util::safe_ofstream os(m_webpass);
 
         if (!os.is_open())
         {

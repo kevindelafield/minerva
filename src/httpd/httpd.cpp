@@ -8,9 +8,9 @@
 #include <istream>
 #include <mutex>
 #include <algorithm>
-#include <owl/log.h>
+#include <util/log.h>
+#include <util/string_utils.h>
 #include <owl/locks.h>
-#include <owl/string_utils.h>
 #include <owl/ssl_connection.h>
 #include "httpd.h"
 #include "http_auth.h"
@@ -188,7 +188,7 @@ namespace httpd
 
     bool httpd::shutdown(std::shared_ptr<owl::connection> conn)
     {
-        owl::timer timer(true);
+        util::timer timer(true);
 
         while (!should_shutdown() && timer.get_elapsed_milliseconds() < 15000)
         {
@@ -493,7 +493,7 @@ namespace httpd
 
     bool httpd::accept(std::shared_ptr<owl::connection> conn)
     {
-        owl::timer timer(true);
+        util::timer timer(true);
         bool accepted = false;
         bool done = false;
         while (!done &&

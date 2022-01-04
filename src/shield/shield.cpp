@@ -1,6 +1,6 @@
 #include <string>
 #include <iostream>
-#include <owl/log.h>
+#include <util/log.h>
 #include <authdb/auth_db.h>
 
 static void print_usage(char * bin)

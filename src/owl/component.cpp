@@ -4,8 +4,8 @@
 #include <cassert>
 #include <functional>
 #include <chrono>
+#include <util/log.h>
 #include "component.h"
-#include "log.h"
 #include "component_visor.h"
 
 namespace owl
@@ -21,7 +21,7 @@ namespace owl
         return v;
     }
     
-    std::shared_ptr<thread_pool> component::add_thread_pool(int count)
+    std::shared_ptr<util::thread_pool> component::add_thread_pool(int count)
     {
         return visor->add_thread_pool(count);
     }
@@ -68,12 +68,12 @@ namespace owl
         lock.unlock();
     }
     
-    scheduler::job_handle component::schedule_job(scheduler::job_element job, int ms)
+    util::scheduler::job_handle component::schedule_job(util::scheduler::job_element job, int ms)
     {
         return visor->schedule_job(job, ms);
     }
 
-    bool component::cancel_job(const scheduler::job_handle & handle)
+    bool component::cancel_job(const util::scheduler::job_handle & handle)
     {
         return visor->cancel_job(handle);
     }

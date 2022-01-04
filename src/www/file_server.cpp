@@ -4,9 +4,9 @@
 #include <fcntl.h>
 #include <jsoncpp/json/json.h>
 #include <owl/component_visor.h>
-#include <owl/string_utils.h>
-#include <owl/file_utils.h>
-#include <owl/log.h>
+#include <util/string_utils.h>
+#include <util/file_utils.h>
+#include <util/log.h>
 #include <httpd/http_request.h>
 #include <httpd/http_response.h>
 #include <httpd/httpd.h>
@@ -37,13 +37,13 @@ namespace www
         m_root_dir = conf["www_root_dir"].asString();
         m_default_file = conf["www_default_file"].asString();
 
-        if (!owl::file_is_directory(m_root_dir))
+        if (!util::file_is_directory(m_root_dir))
         {
             FATAL("www root directory does not exist: " << m_root_dir);
         }
 
         std::string def_file = m_root_dir + "/" + m_default_file;
-        if (!owl::file_is_file(def_file))
+        if (!util::file_is_file(def_file))
         {
             FATAL("www default file does not exist: " << def_file);
         }
@@ -102,7 +102,7 @@ namespace www
             filename = m_root_dir + filename;
         }
 
-        if (!owl::file_is_file(filename))
+        if (!util::file_is_file(filename))
         {
             LOG_DEBUG("didn't find file: " << filename);
             ctx.response().status_code_not_found();

@@ -7,8 +7,8 @@
 #include <functional>
 #include <condition_variable>
 #include <jsoncpp/json/json.h>
-#include "thread_pool.h"
-#include "scheduler.h"
+#include <util/thread_pool.h>
+#include <util/scheduler.h>
 
 namespace owl
 {
@@ -60,13 +60,13 @@ namespace owl
         std::mutex lock;
         std::condition_variable cond;
         
-        std::shared_ptr<thread_pool> add_thread_pool(int count);
+        std::shared_ptr<util::thread_pool> add_thread_pool(int count);
 
         void add_thread(std::function<void()>);
         
-        scheduler::job_handle schedule_job(scheduler::job_element job, int ms);
+        util::scheduler::job_handle schedule_job(util::scheduler::job_element job, int ms);
         
-        bool cancel_job(const scheduler::job_handle & handle);
+        bool cancel_job(const util::scheduler::job_handle & handle);
 
     private:
         friend class component_visor;

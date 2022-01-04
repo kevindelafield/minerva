@@ -11,8 +11,8 @@
 #include <unordered_set>
 #include <owl/component.h>
 #include <owl/connection.h>
-#include <owl/time_utils.h>
-#include <owl/nillable.h>
+#include <util/time_utils.h>
+#include <util/nillable.h>
 #include "http_request.h"
 #include "http_response.h"
 #include "http_auth.h"
@@ -110,7 +110,7 @@ namespace httpd
 
         void start_listeners();
 
-        std::shared_ptr<owl::thread_pool> handler_thread_pool;
+        std::shared_ptr<util::thread_pool> handler_thread_pool;
         std::unordered_map<std::string, controller*> controller_map;
         controller* m_default_controller = nullptr;
         std::atomic<unsigned long long> m_active_count;

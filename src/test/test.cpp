@@ -16,10 +16,10 @@
 #include <openssl/md5.h>
 #include <chrono>
 #include <mutex>
-#include <owl/exec_utils.h>
-#include <owl/string_utils.h>
-#include <owl/log.h>
-#include <owl/unique_command.h>
+#include <util/exec_utils.h>
+#include <util/string_utils.h>
+#include <util/log.h>
+#include <util/unique_command.h>
 #include <owl/connection.h>
 #include <curl/curl.h>
 #include <pugixml.hpp>
@@ -36,7 +36,7 @@ int main(int argc, char** argv)
     args.push_back("-xzf");
     args.push_back("-");
 
-    owl::execl proc("/bin/tar", args);
+    util::execl proc("/bin/tar", args);
 
     int pid;
 
@@ -49,7 +49,7 @@ int main(int argc, char** argv)
     LOG_INFO("running sleep");
 
     int pid2;
-    int status = execbg("/bin/sleep 1000", pid2);
+    int status = util::execbg("/bin/sleep 1000", pid2);
     if (status)
     {
         LOG_ERROR("failed to run sleep");

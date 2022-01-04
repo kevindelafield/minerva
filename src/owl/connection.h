@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <jsoncpp/json/json.h>
-#include "log.h"
+#include <util/log.h>
 
 namespace owl
 {

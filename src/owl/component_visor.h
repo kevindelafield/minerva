@@ -9,9 +9,9 @@
 #include <set>
 #include <cassert>
 #include <jsoncpp/json/json.h>
+#include <util/thread_pool.h>
+#include <util/scheduler.h>
 #include "component.h"
-#include "thread_pool.h"
-#include "scheduler.h"
 
 namespace owl
 {
@@ -25,8 +25,8 @@ namespace owl
         std::vector<std::function<void()>> _thread_functions;
         std::map<std::string, std::unique_ptr<component>> components;
         std::set<std::thread*> threads;
-        std::set<std::shared_ptr<thread_pool>> thread_pools;
-        scheduler sched;
+        std::set<std::shared_ptr<util::thread_pool>> thread_pools;
+        util::scheduler sched;
         bool running;
         std::mutex lock;
         std::condition_variable cond;
@@ -46,23 +46,23 @@ namespace owl
 
         void add(component * cmp);
 
-        scheduler::job_handle schedule_job(scheduler::job_element job, int milliseconds)
+        util::scheduler::job_handle schedule_job(util::scheduler::job_element job, int milliseconds)
         {
             return sched.schedule_job(job, std::chrono::milliseconds(milliseconds));
         }
 
-        bool cancel_job(const scheduler::job_handle & handle)
+        bool cancel_job(const util::scheduler::job_handle & handle)
         {
             return sched.cancel_job(handle);
         }
 
         void add_thread(std::function<void()> routine);
 
-        std::shared_ptr<thread_pool> add_thread_pool(int count)
+        std::shared_ptr<util::thread_pool> add_thread_pool(int count)
         {
             std::unique_lock<std::mutex> lk(lock);
             assert(!running);
-            auto tp = std::make_shared<thread_pool>(count);
+            auto tp = std::make_shared<util::thread_pool>(count);
             assert(tp);
             thread_pools.insert(tp);
             return tp;

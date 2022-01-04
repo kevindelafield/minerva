@@ -3,8 +3,8 @@
 #include <string>
 #include <map>
 #include <functional>
-#include <owl/nillable.h>
-#include <owl/string_utils.h>
+#include <util/nillable.h>
+#include <util/string_utils.h>
 #include "http_request.h"
 #include "http_response.h"
 
@@ -109,7 +109,7 @@ namespace httpd
     private:
 
         bool m_require_authorization = true;
-        std::map<std::string, std::function<void(http_context & ctx)>, owl::ci_less> m_handlers;
+        std::map<std::string, std::function<void(http_context & ctx)>, util::ci_less> m_handlers;
     };
 
 #define REGISTER_HANDLER(name, func)                        \

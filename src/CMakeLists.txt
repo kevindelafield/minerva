@@ -54,22 +54,18 @@ SET (CMAKE_C_CPPCHECK ${CMAKE_SOURCE_DIR}/../tools/runclang.sh)
 
 include_directories(.)
 
-include_directories(owl)
+add_subdirectory(util)
+
 add_subdirectory(owl)
 
-include_directories(httpd)
 add_subdirectory(httpd)
 
-include_directories(authdb)
 add_subdirectory(authdb)
 
-include_directories(shield)
 add_subdirectory(shield)
 
-include_directories(www)
 add_subdirectory(www)
 
-include_directories(test)
 add_subdirectory(test)
 
 

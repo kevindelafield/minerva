@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <owl/log.h>
+#include <util/log.h>
 
 namespace www
 {
@@ -22,7 +22,7 @@ namespace www
 
         std::string pw_override;
         std::string config_file;
-        owl::log::LOG_LEVEL log_level = owl::log::INFO;
+        util::log::LOG_LEVEL log_level = util::log::INFO;
         bool print_version = false;
     };
 }

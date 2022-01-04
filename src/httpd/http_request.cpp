@@ -3,9 +3,9 @@
 #include <cassert>
 #include <curl/curl.h>
 #include <owl/connection.h>
-#include <owl/log.h>
-#include <owl/time_utils.h>
-#include <owl/string_utils.h>
+#include <util/log.h>
+#include <util/time_utils.h>
+#include <util/string_utils.h>
 #include "http_context.h"
 #include "http_request.h"
 
@@ -214,7 +214,7 @@ namespace httpd
             m_headers[key] = value;
         
             // for content length - set it here
-            if (owl::ci_equals(key, content_length))
+            if (util::ci_equals(key, content_length))
             {
                 if (!is_number(value))
                 {
@@ -254,23 +254,23 @@ namespace httpd
             }
         
             // for content type - set it here
-            else if (owl::ci_equals(key, content_type))
+            else if (util::ci_equals(key, content_type))
             {
                 m_content_type = http_content_type::parse(value);
             }
             // for connection - set it here
-            else if (owl::ci_equals(key, connectionKey))
+            else if (util::ci_equals(key, connectionKey))
             {
-                m_keep_alive = owl::ci_equals(value, keepAlive);
+                m_keep_alive = util::ci_equals(value, keepAlive);
             }
             // for connection - set it here
-            else if (owl::ci_equals(key, expectKey))
+            else if (util::ci_equals(key, expectKey))
             {
-                m_continue_100 = owl::ci_equals(value, continue100);
+                m_continue_100 = util::ci_equals(value, continue100);
             }
-            else if (owl::ci_equals(key, "transfer-encoding"))
+            else if (util::ci_equals(key, "transfer-encoding"))
             {
-                if (owl::ci_equals(value, "chunked"))
+                if (util::ci_equals(value, "chunked"))
                 {
                     m_chunked = true;
                 }
@@ -323,7 +323,7 @@ namespace httpd
 
         m_overflow.clear();
 
-        owl::timer _timer(true);
+        util::timer _timer(true);
 
         while (left > 0)
         {
@@ -339,7 +339,7 @@ namespace httpd
 
     std::istream & http_request::read_fully_chunked(int timeoutMs)
     {
-        owl::timer _timer(true);
+        util::timer _timer(true);
 
         while (m_chunk_state != CHUNK_STATE::DONE)
         {
@@ -529,7 +529,7 @@ namespace httpd
 
         buffer.clear();
 
-        owl::timer _timer(true);
+        util::timer _timer(true);
 
         if (m_chunk_state != CHUNK_STATE::READING_CHUNK_HEADER &&
             m_chunk_state != CHUNK_STATE::READING_END &&
@@ -791,7 +791,7 @@ namespace httpd
             return 0;
         }
 
-        owl::timer _timer(true);
+        util::timer _timer(true);
         size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
         m_total_read += read;
     
@@ -800,7 +800,7 @@ namespace httpd
 
     size_t http_request::read_chunked(char * buf, size_t len, int timeoutMs)
     {
-        owl::timer _timer(true);
+        util::timer _timer(true);
 
         while (m_chunk_state != CHUNK_STATE::DONE)
         {
@@ -1002,7 +1002,7 @@ namespace httpd
         size_t left = m_content_length - m_total_read - m_overflow.size();
 
         char buf[64*1024];
-        owl::timer timer(true);
+        util::timer timer(true);
         size_t to_read = std::min(left, sizeof(buf));
         try
         {
@@ -1023,7 +1023,7 @@ namespace httpd
 
     bool http_request::null_body_read_chunked(int timeoutMs)
     {
-        owl::timer _timer(true);
+        util::timer _timer(true);
 
         try
         {
@@ -1214,7 +1214,7 @@ namespace httpd
     }
 
     size_t http_request::read_from_socket(char * buf, size_t len,
-                                          owl::timer & timer,
+                                          util::timer & timer,
                                           int timeoutMs)
     {
         bool reading = true;

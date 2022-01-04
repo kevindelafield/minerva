@@ -2,8 +2,8 @@
 
 #include <cstring>
 #include <functional>
-#include <owl/time_utils.h>
-#include <owl/nillable.h>
+#include <util/time_utils.h>
+#include <util/nillable.h>
 #include <owl/connection.h>
 #include "http_request.h"
 #include "http_response.h"
@@ -23,7 +23,7 @@ namespace httpd
 
         ~http_context() = default;
 
-        owl::nillable<std::function<void()>> post_command() const
+        util::nillable<std::function<void()>> post_command() const
         {
             return m_post_command;
         }
@@ -57,7 +57,7 @@ namespace httpd
             return m_username;
         }
 
-        void post_command(const owl::nillable<std::function<void()>> & cmd)
+        void post_command(const util::nillable<std::function<void()>> & cmd)
         {
             m_post_command = cmd;
         }
@@ -112,9 +112,9 @@ namespace httpd
         struct sockaddr_in m_client_addr;
         socklen_t m_client_addr_len;
         int m_timeout_msecs = DEFAULT_TIMEOUT;
-        owl::timer m_timer;
+        util::timer m_timer;
         std::function<bool()> m_sd_cb;
-        owl::nillable<std::function<void()>> m_post_command;
+        util::nillable<std::function<void()>> m_post_command;
 
     };
 }

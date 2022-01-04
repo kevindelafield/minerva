@@ -8,8 +8,8 @@
 #include <istream>
 #include <streambuf>
 #include <deque>
-#include <owl/string_utils.h>
-#include <owl/time_utils.h>
+#include <util/string_utils.h>
+#include <util/time_utils.h>
 #include "http_content_type.h"
 #include "http_exception.h"
 
@@ -51,7 +51,7 @@ namespace httpd
             return false;
         }
 
-        const std::map<std::string, std::string, owl::ci_less> & headers() const
+        const std::map<std::string, std::string, util::ci_less> & headers() const
         {
             return m_headers;
         }
@@ -117,7 +117,7 @@ namespace httpd
             return m_query_string;
         }
 
-        const std::map<std::string, std::string, owl::ci_less> & query_parameters() const
+        const std::map<std::string, std::string, util::ci_less> & query_parameters() const
         {
             return m_query_params;
         }
@@ -195,7 +195,7 @@ namespace httpd
         size_t read_chunked(char * buf, size_t len, int timeoutMs);
 
         size_t read_from_socket(char * buf, size_t len,
-                                owl::timer & timer,
+                                util::timer & timer,
                                 int timeoutMs);
 
         bool m_chunked = false;
@@ -203,12 +203,12 @@ namespace httpd
         bool m_partial_read = false;
         size_t m_total_read = 0;
         size_t m_offset;
-        std::map<std::string, std::string, owl::ci_less> m_headers;
+        std::map<std::string, std::string, util::ci_less> m_headers;
         METHOD m_method;
         bool m_http11;
         long long m_content_length;
         std::string m_path;
-        std::map<std::string, std::string, owl::ci_less> m_query_params;
+        std::map<std::string, std::string, util::ci_less> m_query_params;
         http_content_type::code m_content_type;
         std::string m_query_string;
         http_context * m_ctx;

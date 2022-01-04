@@ -6,12 +6,12 @@
 #include <signal.h>
 #include <cassert>
 #include <mutex>
-#include <owl/log.h>
 #include <owl/component_visor.h>
 #include <owl/ssl_connection.h>
-#include <owl/file_utils.h>
-#include <owl/json_utils.h>
-#include <owl/exec_utils.h>
+#include <util/log.h>
+#include <util/file_utils.h>
+#include <util/json_utils.h>
+#include <util/exec_utils.h>
 #include <httpd/httpd.h>
 #include <authdb/auth_db.h>
 #include "file_server.h"
@@ -75,7 +75,7 @@ static void hup_handler(int signal)
 
                           std::ifstream cf(config_file);
                           Json::Value config;
-                          if (!owl::parse_json(cf, config))
+                          if (!util::parse_json(cf, config))
                           {
                               LOG_ERROR("the config file " << config_file << " is not valid json");
                               return;
@@ -133,7 +133,7 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    owl::log::set_log_level(ss.log_level);
+    util::log::set_log_level(ss.log_level);
 
     LOG_INFO("www application version " << WWW_VERSION);
     
@@ -148,7 +148,7 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    if (!owl::file_is_file(ss.config_file))
+    if (!util::file_is_file(ss.config_file))
     {
         std::string cf = ss.config_file;
         LOG_FATAL("the config file " << cf << " was not found");
@@ -157,7 +157,7 @@ int main(int argc, char** argv)
 
     std::ifstream cf(ss.config_file, std::ifstream::binary);
     Json::Value config;
-    if (!owl::parse_json(cf, config))
+    if (!util::parse_json(cf, config))
     {
         std::string cf = ss.config_file;
         LOG_FATAL("the config file " << cf << " is not valid json");

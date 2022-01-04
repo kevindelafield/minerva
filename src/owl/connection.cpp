@@ -8,8 +8,8 @@
 #include <cassert>
 #include <cstring>
 #include <algorithm>
+#include <util/log.h>
 #include "connection.h"
-#include "log.h"
 
 namespace owl
 {
