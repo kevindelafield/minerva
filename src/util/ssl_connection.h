@@ -5,7 +5,7 @@
 #include <openssl/err.h>
 #include "connection.h"
 
-namespace owl
+namespace util
 {
     class ssl_connection : public connection
     {

@@ -10,8 +10,8 @@
 #include <algorithm>
 #include <util/log.h>
 #include <util/string_utils.h>
+#include <util/ssl_connection.h>
 #include <owl/locks.h>
-#include <owl/ssl_connection.h>
 #include "httpd.h"
 #include "http_auth.h"
 #include "http_context.h"
@@ -77,16 +77,16 @@ namespace httpd
 
         for (auto & listener : m_listeners)
         {
-            std::shared_ptr<owl::connection> conn;
+            std::shared_ptr<util::connection> conn;
             if (listener.protocol == httpd::PROTOCOL::HTTP)
             {
                 conn =
-                    std::make_shared<owl::connection>(AF_INET6,
+                    std::make_shared<util::connection>(AF_INET6,
                                                       SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
             }
             else if (listener.protocol == httpd::PROTOCOL::HTTPS)
             {
-                conn = std::dynamic_pointer_cast<owl::connection>(std::make_shared<owl::ssl_connection>(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+                conn = std::dynamic_pointer_cast<util::connection>(std::make_shared<util::ssl_connection>(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
             }
             else
             {
@@ -177,7 +177,7 @@ namespace httpd
         return v;
     }
     
-    void httpd::shutdown_write_async(std::shared_ptr<owl::connection> conn)
+    void httpd::shutdown_write_async(std::shared_ptr<util::connection> conn)
     {
         schedule_job([this, conn]()
                      {
@@ -186,7 +186,7 @@ namespace httpd
                      }, 0);
     }
 
-    bool httpd::shutdown(std::shared_ptr<owl::connection> conn)
+    bool httpd::shutdown(std::shared_ptr<util::connection> conn)
     {
         util::timer timer(true);
 
@@ -197,27 +197,27 @@ namespace httpd
             auto status = conn->shutdown();
             switch (status)
             {
-            case owl::connection::CONNECTION_STATUS::CONNECTION_OK:
+            case util::connection::CONNECTION_STATUS::CONNECTION_OK:
             {
                 return true;
             }
             break;
-            case owl::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
+            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
             {
                 reading = true;
             }
             break;
-            case owl::connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
+            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
             {
                 reading = false;
             }
             break;
-            case owl::connection::CONNECTION_STATUS::CONNECTION_CLOSED:
+            case util::connection::CONNECTION_STATUS::CONNECTION_CLOSED:
             {
                 return false;
             }
             break;
-            case owl::connection::CONNECTION_STATUS::CONNECTION_ERROR:
+            case util::connection::CONNECTION_STATUS::CONNECTION_ERROR:
             {
                 LOG_DEBUG("failed to terminate connection");
                 return false;
@@ -249,9 +249,9 @@ namespace httpd
     {
         while (!should_shutdown())
         {
-            std::map<int, std::tuple<std::shared_ptr<owl::connection>, struct sockaddr_in, socklen_t>> map;
-            std::vector<owl::connection::shared_poll_fd> fds;
-            std::vector<std::shared_ptr<owl::connection>> to_close;
+            std::map<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> map;
+            std::vector<util::connection::shared_poll_fd> fds;
+            std::vector<std::shared_ptr<util::connection>> to_close;
             
             // wait for sockets or a shutdown
             {
@@ -286,16 +286,16 @@ namespace httpd
             }
 
             std::for_each(map.begin(), map.end(),
-                          [&fds](std::pair<int, std::tuple<std::shared_ptr<owl::connection>, struct sockaddr_in, socklen_t>> item)
+                          [&fds](std::pair<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> item)
                           {
-                              fds.push_back(owl::connection::shared_poll_fd(item.first,
+                              fds.push_back(util::connection::shared_poll_fd(item.first,
                                                                        true,
                                                                        false,
                                                                        true));
                           });
 
             int err;
-            int status = owl::connection::poll(fds, 10, err);
+            int status = util::connection::poll(fds, 10, err);
             if (status == 0)
             {
                 continue;
@@ -367,7 +367,7 @@ namespace httpd
         }
     }
     
-    void httpd::put_back_connection(std::shared_ptr<owl::connection> conn, 
+    void httpd::put_back_connection(std::shared_ptr<util::connection> conn, 
                                     const sockaddr_in & addr, 
                                     socklen_t addr_len)
     {
@@ -385,7 +385,7 @@ namespace httpd
 
         while (!should_shutdown())
         {
-            std::vector<owl::connection::shared_poll_fd> fds;
+            std::vector<util::connection::shared_poll_fd> fds;
 
             {
                 std::unique_lock<std::mutex> lk(m_listener_lock);
@@ -402,14 +402,14 @@ namespace httpd
 
             for (auto & socket : m_listener_sockets)
             {
-                fds.push_back(owl::connection::shared_poll_fd(socket.first,
+                fds.push_back(util::connection::shared_poll_fd(socket.first,
                                                          true,
                                                          false,
                                                          true));
             }
             
             int err;
-            int status = owl::connection::poll(fds, polling_period_ms, err);
+            int status = util::connection::poll(fds, polling_period_ms, err);
             if (status == 0)
             {
                 continue;
@@ -468,9 +468,9 @@ namespace httpd
                 LOG_DEBUG("Accept Successful: " << http);
                 
                 // queue up request
-                std::shared_ptr<owl::connection> conn = http ?
-                    std::make_shared<owl::connection>(s) :
-                    std::dynamic_pointer_cast<owl::connection>(std::make_shared<owl::ssl_connection>(s));
+                std::shared_ptr<util::connection> conn = http ?
+                    std::make_shared<util::connection>(s) :
+                    std::dynamic_pointer_cast<util::connection>(std::make_shared<util::ssl_connection>(s));
                 assert(conn);
                 
                 schedule_job([this, conn, addr, addr_len]()
@@ -491,7 +491,7 @@ namespace httpd
         }
     }
 
-    bool httpd::accept(std::shared_ptr<owl::connection> conn)
+    bool httpd::accept(std::shared_ptr<util::connection> conn)
     {
         util::timer timer(true);
         bool accepted = false;
@@ -504,29 +504,29 @@ namespace httpd
             auto ssl_status = conn->accept_ssl();
             switch (ssl_status)
             {
-            case owl::connection::CONNECTION_STATUS::CONNECTION_OK:
+            case util::connection::CONNECTION_STATUS::CONNECTION_OK:
             {
                 accepted = true;
                 done = true;
                 break;
             }
             break;
-            case owl::connection::CONNECTION_STATUS::CONNECTION_CLOSED:
+            case util::connection::CONNECTION_STATUS::CONNECTION_CLOSED:
             {
                 LOG_DEBUG("connection closed during tls negotiation");
                 done = true;
                 break;
             }
-            case owl::connection::CONNECTION_STATUS::CONNECTION_ERROR:
+            case util::connection::CONNECTION_STATUS::CONNECTION_ERROR:
             {
                 LOG_DEBUG("error during tls negotiation");
                 done = true;
                 break;
             }
-            case owl::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
-            case owl::connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
+            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
+            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
             {
-                bool read = ssl_status == owl::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ;
+                bool read = ssl_status == util::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ;
                 bool write = !read;
                 bool error = true;
 
@@ -605,7 +605,7 @@ namespace httpd
 
     constexpr static size_t BUFFER_SIZE = 100*1024;
 
-    void httpd::handle_request(std::shared_ptr<owl::connection> conn,
+    void httpd::handle_request(std::shared_ptr<util::connection> conn,
                                const struct sockaddr_in & addr, 
                                socklen_t addr_len)
     {
@@ -719,21 +719,21 @@ namespace httpd
                                         sizeof(tmpbuf)), read);
                 switch (status)
                 {
-                case owl::connection::CONNECTION_ERROR:
+                case util::connection::CONNECTION_ERROR:
                 {
                     abrt = true;
                     LOG_WARN_ERRNO("Http client timeout or socket read error",
                                    errno);
                 }
                 break;
-                case owl::connection::CONNECTION_CLOSED:
+                case util::connection::CONNECTION_CLOSED:
                 {
                     abrt = true;
                     // don't log warnings for close after keep-alive
                     LOG_WARN("Http client disconnected unexpectedly");
                 }
                 break;
-                case owl::connection::CONNECTION_OK:
+                case util::connection::CONNECTION_OK:
                 {
                     if (read == 0)
                     {
@@ -748,13 +748,13 @@ namespace httpd
                     }
                 }
                 break;
-                case owl::connection::CONNECTION_WANTS_READ:
+                case util::connection::CONNECTION_WANTS_READ:
                 {
                     reading = true;
                     abrt = false;
                 }
                 break;
-                case owl::connection::CONNECTION_WANTS_WRITE:
+                case util::connection::CONNECTION_WANTS_WRITE:
                 {
                     reading = false;
                     abrt = false;

@@ -4,7 +4,7 @@
 #include <functional>
 #include <util/time_utils.h>
 #include <util/nillable.h>
-#include <owl/connection.h>
+#include <util/connection.h>
 #include "http_request.h"
 #include "http_response.h"
 
@@ -14,7 +14,7 @@ namespace httpd
     {
     public:
 
-        http_context(std::shared_ptr<owl::connection> conn, std::function<bool()> sdCb)
+        http_context(std::shared_ptr<util::connection> conn, std::function<bool()> sdCb)
         : m_request(this), m_response(this), m_conn(conn), m_timer(true),
           m_sd_cb(sdCb)
             {
@@ -72,7 +72,7 @@ namespace httpd
             return m_response;
         }
 
-        std::shared_ptr<owl::connection> conn() const
+        std::shared_ptr<util::connection> conn() const
         {
             return m_conn;
         }
@@ -106,7 +106,7 @@ namespace httpd
         const int DEFAULT_TIMEOUT = 60000;
         http_request m_request;
         http_response m_response;
-        std::shared_ptr<owl::connection> m_conn;
+        std::shared_ptr<util::connection> m_conn;
         std::string m_username;
         std::string m_client_ip;
         struct sockaddr_in m_client_addr;

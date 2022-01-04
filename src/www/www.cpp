@@ -7,7 +7,7 @@
 #include <cassert>
 #include <mutex>
 #include <owl/component_visor.h>
-#include <owl/ssl_connection.h>
+#include <util/ssl_connection.h>
 #include <util/log.h>
 #include <util/file_utils.h>
 #include <util/json_utils.h>
@@ -189,7 +189,7 @@ int main(int argc, char** argv)
         key_file = config["key_file"].asString();
     }
 
-    owl::ssl_connection::init(cert_file.c_str(), key_file.c_str());
+    util::ssl_connection::init(cert_file.c_str(), key_file.c_str());
 
     // build compponents
     auto k1 = new httpd::httpd();
@@ -253,7 +253,7 @@ int main(int argc, char** argv)
     
     kv().clear();
     
-    owl::ssl_connection::destroy();
+    util::ssl_connection::destroy();
 
     if (auth_db)
     {

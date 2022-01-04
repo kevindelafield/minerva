@@ -10,7 +10,7 @@
 #include <deque>
 #include <unordered_set>
 #include <owl/component.h>
-#include <owl/connection.h>
+#include <util/connection.h>
 #include <util/time_utils.h>
 #include <util/nillable.h>
 #include "http_request.h"
@@ -105,7 +105,7 @@ namespace httpd
 
             PROTOCOL protocol = PROTOCOL::HTTP;
             int port = 80;
-            std::shared_ptr<owl::connection> conn;
+            std::shared_ptr<util::connection> conn;
         };
 
         void start_listeners();
@@ -127,21 +127,21 @@ namespace httpd
         std::mutex m_log_lock;
         std::deque<std::string> m_cgi_log;
     
-        std::map<int, std::tuple<std::shared_ptr<owl::connection>, struct sockaddr_in, socklen_t>> m_socket_map;
+        std::map<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> m_socket_map;
 
         void log(http_context & ctx, const std::string & date);
 
-        bool accept(std::shared_ptr<owl::connection> conn);
+        bool accept(std::shared_ptr<util::connection> conn);
         
-        bool shutdown(std::shared_ptr<owl::connection> conn);
+        bool shutdown(std::shared_ptr<util::connection> conn);
 
-        void shutdown_write_async(std::shared_ptr<owl::connection> conn);
+        void shutdown_write_async(std::shared_ptr<util::connection> conn);
         
-        void put_back_connection(std::shared_ptr<owl::connection> conn,
+        void put_back_connection(std::shared_ptr<util::connection> conn,
                                  const sockaddr_in & addr, 
                                  socklen_t addr_len);
 
-        void handle_request(std::shared_ptr<owl::connection> conn, 
+        void handle_request(std::shared_ptr<util::connection> conn, 
                             const struct sockaddr_in & addr, 
                             socklen_t addr_len);
     

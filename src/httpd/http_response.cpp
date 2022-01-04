@@ -104,25 +104,25 @@ namespace httpd
                 auto status = m_ctx->conn()->write(buf + total, left, sent);
                 switch (status)
                 {
-                case owl::connection::CONNECTION_ERROR:
+                case util::connection::CONNECTION_ERROR:
                 {
                     LOG_DEBUG_ERRNO("Http client timeout or socketwrite error",
                                     errno);
                     return false;
                 }
                 break;
-                case owl::connection::CONNECTION_OK:
+                case util::connection::CONNECTION_OK:
                 {
                     writing = true;
                     total += sent;
                 }
                 break;
-                case owl::connection::CONNECTION_WANTS_WRITE:
+                case util::connection::CONNECTION_WANTS_WRITE:
                 {
                     writing = true;
                 }
                 break;
-                case owl::connection::CONNECTION_WANTS_READ:
+                case util::connection::CONNECTION_WANTS_READ:
                 {
                     writing = false;
                 }

@@ -5,7 +5,7 @@
 #include <openssl/err.h>
 #include "ssl_connection.h"
 
-namespace owl
+namespace util
 {
     static void log_ssl_errors()
     {

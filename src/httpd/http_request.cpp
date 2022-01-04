@@ -2,7 +2,7 @@
 #include <regex>
 #include <cassert>
 #include <curl/curl.h>
-#include <owl/connection.h>
+#include <util/connection.h>
 #include <util/log.h>
 #include <util/time_utils.h>
 #include <util/string_utils.h>
@@ -1275,20 +1275,20 @@ namespace httpd
                 m_ctx->conn()->read(buf, len, read);
             switch (status)
             {
-            case owl::connection::CONNECTION_ERROR:
+            case util::connection::CONNECTION_ERROR:
             {
                 LOG_DEBUG_ERRNO("Http client timeout or socket read error",
                                 errno);
                 throw http_exception("read error");
             }
             break;
-            case owl::connection::CONNECTION_CLOSED:
+            case util::connection::CONNECTION_CLOSED:
             {
                 LOG_DEBUG("Http client disconnected unexpectedly");
                 throw http_exception("connection closed");
             }
             break;
-            case owl::connection::CONNECTION_OK:
+            case util::connection::CONNECTION_OK:
             {
                 if (read == 0)
                 {
@@ -1301,12 +1301,12 @@ namespace httpd
                 }
                 break;
             }
-            case owl::connection::CONNECTION_WANTS_READ:
+            case util::connection::CONNECTION_WANTS_READ:
             {
                 reading = true;
             }
             break;
-            case owl::connection::CONNECTION_WANTS_WRITE:
+            case util::connection::CONNECTION_WANTS_WRITE:
             {
                 reading = false;
             }

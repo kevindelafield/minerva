@@ -4,8 +4,6 @@
 #include <util/log.h>
 #include "auth_db.h"
 
-using namespace owl;
-
 namespace authdb
 {
     bool auth_db::initialize()

@@ -11,7 +11,7 @@
 #include <util/log.h>
 #include "connection.h"
 
-namespace owl
+namespace util
 {
 
     std::atomic<unsigned long long> connection::shutdown_counter;

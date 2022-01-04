@@ -20,11 +20,9 @@
 #include <util/string_utils.h>
 #include <util/log.h>
 #include <util/unique_command.h>
-#include <owl/connection.h>
+#include <util/connection.h>
 #include <curl/curl.h>
 #include <pugixml.hpp>
-
-using namespace owl;
 
 int main(int argc, char** argv)
 {

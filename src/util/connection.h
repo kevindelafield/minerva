@@ -10,7 +10,7 @@
 #include <jsoncpp/json/json.h>
 #include <util/log.h>
 
-namespace owl
+namespace util
 {
 
     class connection
