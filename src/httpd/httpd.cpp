@@ -75,6 +75,8 @@ namespace httpd
     {
         for (auto listener : m_listener_sockets)
         {
+            listener.second.conn->shutdown_write();
+            listener.second.conn->shutdown_read();
             delete listener.second.conn;
         }
         m_listener_sockets.clear();
@@ -148,6 +150,8 @@ namespace httpd
     {
         for (auto listener : m_listener_sockets)
         {
+            listener.second.conn->shutdown_write();
+            listener.second.conn->shutdown_read();
             delete listener.second.conn;
         }
         m_listener_sockets.clear();
