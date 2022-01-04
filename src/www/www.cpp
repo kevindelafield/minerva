@@ -214,6 +214,7 @@ int main(int argc, char** argv)
         k1->auth_db(auth_db);
     }
 
+    k2->require_authorization(false);
     k2->config(config);
 
     if (config.isMember("http.port") && config["http.port"].isInt())
