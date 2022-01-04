@@ -2,7 +2,7 @@
 #include <cstring>
 #include "storage_utils.h"
 
-namespace owl
+namespace util
 {
 
     long get_free_space(const std::string & path)
