@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <mutex>
 #include <condition_variable>
 #include <map>
@@ -25,7 +24,7 @@ namespace owl
         std::vector<std::function<void()>> _thread_functions;
         std::map<std::string, std::unique_ptr<component>> components;
         std::set<std::thread*> threads;
-        std::set<std::shared_ptr<util::thread_pool>> thread_pools;
+        std::set<util::thread_pool *> thread_pools;
         util::scheduler sched;
         bool running;
         std::mutex lock;
@@ -58,11 +57,11 @@ namespace owl
 
         void add_thread(std::function<void()> routine);
 
-        std::shared_ptr<util::thread_pool> add_thread_pool(int count)
+        util::thread_pool * add_thread_pool(int count)
         {
             std::unique_lock<std::mutex> lk(lock);
             assert(!running);
-            auto tp = std::make_shared<util::thread_pool>(count);
+            auto tp = new util::thread_pool(count);
             assert(tp);
             thread_pools.insert(tp);
             return tp;

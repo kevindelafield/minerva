@@ -21,7 +21,7 @@ namespace owl
         return v;
     }
     
-    std::shared_ptr<util::thread_pool> component::add_thread_pool(int count)
+    util::thread_pool * component::add_thread_pool(int count)
     {
         return visor->add_thread_pool(count);
     }

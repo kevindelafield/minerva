@@ -88,7 +88,7 @@ namespace owl
 
         // start thread pools
         std::for_each(thread_pools.begin(), thread_pools.end(),
-                      [] (std::shared_ptr<util::thread_pool> tp) {
+                      [] (util::thread_pool * tp) {
                           tp->start();
                       });
 
@@ -119,7 +119,7 @@ namespace owl
                           it.second->stop();
                       });
         std::for_each(thread_pools.begin(), thread_pools.end(),
-                      [] (std::shared_ptr<util::thread_pool> tp) {
+                      [] (util::thread_pool * tp) {
                           tp->stop();
                       });
 
@@ -155,7 +155,7 @@ namespace owl
             });
         threads.clear();
         std::for_each(thread_pools.begin(), thread_pools.end(),
-                      [] (std::shared_ptr<util::thread_pool> tp) {
+                      [] (util::thread_pool * tp) {
                           tp->wait();
                       });
         thread_pools.clear();

@@ -110,7 +110,7 @@ namespace httpd
 
         void start_listeners();
 
-        std::shared_ptr<util::thread_pool> handler_thread_pool;
+        util::thread_pool * handler_thread_pool;
         std::unordered_map<std::string, controller*> controller_map;
         controller* m_default_controller = nullptr;
         std::atomic<unsigned long long> m_active_count;

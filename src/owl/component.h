@@ -3,7 +3,6 @@
 #include <set>
 #include <vector>
 #include <mutex>
-#include <memory>
 #include <functional>
 #include <condition_variable>
 #include <jsoncpp/json/json.h>
@@ -60,7 +59,7 @@ namespace owl
         std::mutex lock;
         std::condition_variable cond;
         
-        std::shared_ptr<util::thread_pool> add_thread_pool(int count);
+        util::thread_pool * add_thread_pool(int count);
 
         void add_thread(std::function<void()>);
         
