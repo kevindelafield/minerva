@@ -164,19 +164,6 @@ namespace httpd
         }
     }
 
-    Json::Value httpd::get_stats()
-    {
-        Json::Value v;
-
-        std::unique_lock<std::mutex> lk(lock);
-
-        v["idle"] = (Json::UInt64)m_socket_map.size();
-        v["active"] = (Json::UInt64)m_active_count.load();
-        v["requests"] = (Json::UInt64)m_request_count.load();
-
-        return v;
-    }
-    
     void httpd::shutdown_write_async(std::shared_ptr<util::connection> conn)
     {
         schedule_job([this, conn]()

@@ -7,7 +7,6 @@
 #include <thread>
 #include <set>
 #include <cassert>
-#include <jsoncpp/json/json.h>
 #include <util/thread_pool.h>
 #include <util/scheduler.h>
 #include "component.h"
@@ -91,8 +90,5 @@ namespace owl
         void release();
 
         void hup();
-
-        Json::Value get_stats();
-
     };
 }

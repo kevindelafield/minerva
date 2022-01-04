@@ -55,8 +55,6 @@ namespace httpd
             return NAME;
         };
     
-        Json::Value get_stats() override;
-    
         void clear_listeners();
 
         void add_listener(PROTOCOL protocol, int port);

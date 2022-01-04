@@ -4,7 +4,6 @@
 #include <signal.h>
 #include <util/log.h>
 #include <util/safe_ofstream.h>
-#include <util/json_utils.h>
 #include <util/file_utils.h>
 #include "component_visor.h"
 
@@ -38,18 +37,6 @@ namespace owl
         assert(!m_should_shutdown);
         
         _thread_functions.push_back(fp);
-    }
-
-    Json::Value component_visor::get_stats()
-    {
-        Json::Value stats;
-
-        for (auto const & k : components)
-        {
-            stats[k.first] = k.second->get_stats();
-        }
-
-        return stats;
     }
 
     void component_visor::clear()

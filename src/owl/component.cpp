@@ -15,12 +15,6 @@ namespace owl
         return visor->get_component<component>(name);
     }
     
-    Json::Value component::get_stats()
-    {
-        Json::Value v;
-        return v;
-    }
-    
     util::thread_pool * component::add_thread_pool(int count)
     {
         return visor->add_thread_pool(count);

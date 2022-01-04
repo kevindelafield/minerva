@@ -5,7 +5,6 @@
 #include <mutex>
 #include <functional>
 #include <condition_variable>
-#include <jsoncpp/json/json.h>
 #include <util/thread_pool.h>
 #include <util/scheduler.h>
 
@@ -46,12 +45,6 @@ namespace owl
         
         virtual void hup();
         
-        virtual Json::Value get_stats();
-
-        bool get_setting(const std::string & name, Json::Value & value);
-
-        void set_setting(const std::string & name, const Json::Value & value);
-
         bool save_settings();
 
     protected:
