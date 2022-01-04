@@ -73,6 +73,10 @@ namespace httpd
 
     void httpd::start_listeners()
     {
+        for (auto listener : m_listener_sockets)
+        {
+            delete listener.second.conn;
+        }
         m_listener_sockets.clear();
 
         for (auto & listener : m_listeners)
@@ -142,6 +146,11 @@ namespace httpd
 
     void httpd::release()
     {
+        for (auto listener : m_listener_sockets)
+        {
+            delete listener.second.conn;
+        }
+        m_listener_sockets.clear();
     }
 
     void httpd::hup()
@@ -486,6 +495,8 @@ namespace httpd
                              }, 0);
             }
         }
+
+        
     }
 
     bool httpd::accept(util::connection * conn)
