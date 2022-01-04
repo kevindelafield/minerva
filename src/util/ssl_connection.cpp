@@ -245,7 +245,6 @@ namespace util
         }
 
         read = status;
-        read_counter += read;
         last_read = std::chrono::steady_clock::now();
         return CONNECTION_STATUS::CONNECTION_OK;
     }
@@ -295,7 +294,6 @@ namespace util
         }
 
         written = status;
-        write_counter += written;
         last_write = std::chrono::steady_clock::now();
         return CONNECTION_STATUS::CONNECTION_OK;
     }

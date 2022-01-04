@@ -77,22 +77,24 @@ namespace httpd
 
         for (auto & listener : m_listeners)
         {
-            std::shared_ptr<util::connection> conn;
+            util::connection * conn;
             if (listener.protocol == httpd::PROTOCOL::HTTP)
             {
                 conn =
-                    std::make_shared<util::connection>(AF_INET6,
-                                                      SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+                    new util::connection(AF_INET6,
+                                         SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
             }
             else if (listener.protocol == httpd::PROTOCOL::HTTPS)
             {
-                conn = std::dynamic_pointer_cast<util::connection>(std::make_shared<util::ssl_connection>(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+                conn = static_cast<util::connection *>(new util::ssl_connection(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
             }
             else
             {
                 LOG_ERROR("invalid http protocol: " << listener.protocol);
                 continue;
             }
+
+            assert(conn);
 
             if (!conn->reuse_addr(true))
             {
@@ -106,6 +108,7 @@ namespace httpd
             {
                 FATAL_ERRNO("Failed to set ipv6 only", errno);
             }
+
 
             static struct in6_addr any6addr = IN6ADDR_ANY_INIT;
 
@@ -164,16 +167,17 @@ namespace httpd
         }
     }
 
-    void httpd::shutdown_write_async(std::shared_ptr<util::connection> conn)
+    void httpd::shutdown_write_async(util::connection * conn)
     {
         schedule_job([this, conn]()
                      {
                          shutdown(conn);
                          conn->shutdown_write();
+                         delete conn;
                      }, 0);
     }
 
-    bool httpd::shutdown(std::shared_ptr<util::connection> conn)
+    bool httpd::shutdown(util::connection * conn)
     {
         util::timer timer(true);
 
@@ -236,9 +240,9 @@ namespace httpd
     {
         while (!should_shutdown())
         {
-            std::map<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> map;
+            std::map<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> map;
             std::vector<util::connection::shared_poll_fd> fds;
-            std::vector<std::shared_ptr<util::connection>> to_close;
+            std::vector<util::connection *> to_close;
             
             // wait for sockets or a shutdown
             {
@@ -273,7 +277,7 @@ namespace httpd
             }
 
             std::for_each(map.begin(), map.end(),
-                          [&fds](std::pair<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> item)
+                          [&fds](std::pair<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> item)
                           {
                               fds.push_back(util::connection::shared_poll_fd(item.first,
                                                                        true,
@@ -338,6 +342,10 @@ namespace httpd
                                                          std::get<2>(to_send));
                                 });
                         }
+                        else
+                        {
+                            to_close.push_back(socket);
+                        }
                     }
                 }
             }
@@ -348,13 +356,14 @@ namespace httpd
                                  it->shutdown();
                                  it->shutdown_write();
                                  it->shutdown_read();
+                                 delete it;
                              }
                          }, 0);
             // shutdown connections
         }
     }
     
-    void httpd::put_back_connection(std::shared_ptr<util::connection> conn, 
+    void httpd::put_back_connection(util::connection * conn, 
                                     const sockaddr_in & addr, 
                                     socklen_t addr_len)
     {
@@ -455,9 +464,9 @@ namespace httpd
                 LOG_DEBUG("Accept Successful: " << http);
                 
                 // queue up request
-                std::shared_ptr<util::connection> conn = http ?
-                    std::make_shared<util::connection>(s) :
-                    std::dynamic_pointer_cast<util::connection>(std::make_shared<util::ssl_connection>(s));
+                util::connection * conn = http ?
+                    new util::connection(s) :
+                    static_cast<util::connection *>(new util::ssl_connection(s));
                 assert(conn);
                 
                 schedule_job([this, conn, addr, addr_len]()
@@ -465,6 +474,7 @@ namespace httpd
                                  if (!accept(conn))
                                  {
                                      LOG_DEBUG("failed to establish tls session");
+                                     delete conn;
                                  }
                                  else
                                  {
@@ -478,7 +488,7 @@ namespace httpd
         }
     }
 
-    bool httpd::accept(std::shared_ptr<util::connection> conn)
+    bool httpd::accept(util::connection * conn)
     {
         util::timer timer(true);
         bool accepted = false;
@@ -592,7 +602,7 @@ namespace httpd
 
     constexpr static size_t BUFFER_SIZE = 100*1024;
 
-    void httpd::handle_request(std::shared_ptr<util::connection> conn,
+    void httpd::handle_request(util::connection * conn,
                                const struct sockaddr_in & addr, 
                                socklen_t addr_len)
     {
@@ -610,8 +620,8 @@ namespace httpd
         // allocate send and receive buffers on the stack
 
         http_context ctx(conn, [this]() {
-                return should_shutdown();
-            });
+            return should_shutdown();
+        });
 
         ctx.client_ip(client_ip);
         ctx.client_addr(addr, addr_len);
@@ -1043,6 +1053,7 @@ namespace httpd
             LOG_WARN("aborting HTTP connection");
             conn->shutdown_write();
             conn->shutdown_read();
+            delete conn;
         }
 
         m_active_count--;

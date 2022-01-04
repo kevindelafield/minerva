@@ -2,7 +2,6 @@
 
 #include <unordered_map>
 #include <istream>
-#include <memory>
 #include <mutex>
 #include <set>
 #include <atomic>
@@ -103,7 +102,7 @@ namespace httpd
 
             PROTOCOL protocol = PROTOCOL::HTTP;
             int port = 80;
-            std::shared_ptr<util::connection> conn;
+            util::connection * conn;
         };
 
         void start_listeners();
@@ -125,21 +124,21 @@ namespace httpd
         std::mutex m_log_lock;
         std::deque<std::string> m_cgi_log;
     
-        std::map<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> m_socket_map;
+        std::map<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> m_socket_map;
 
         void log(http_context & ctx, const std::string & date);
 
-        bool accept(std::shared_ptr<util::connection> conn);
+        bool accept(util::connection * conn);
         
-        bool shutdown(std::shared_ptr<util::connection> conn);
+        bool shutdown(util::connection * conn);
 
-        void shutdown_write_async(std::shared_ptr<util::connection> conn);
+        void shutdown_write_async(util::connection * conn);
         
-        void put_back_connection(std::shared_ptr<util::connection> conn,
+        void put_back_connection(util::connection * conn,
                                  const sockaddr_in & addr, 
                                  socklen_t addr_len);
 
-        void handle_request(std::shared_ptr<util::connection> conn, 
+        void handle_request(util::connection * conn, 
                             const struct sockaddr_in & addr, 
                             socklen_t addr_len);
     

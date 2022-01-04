@@ -14,12 +14,6 @@
 namespace util
 {
 
-    std::atomic<unsigned long long> connection::shutdown_counter;
-    std::atomic<unsigned long long> connection::open_counter;
-    std::atomic<unsigned long long> connection::read_counter;
-    std::atomic<unsigned long long> connection::write_counter;
-    std::atomic<unsigned long long> connection::socket_counter;
-
     connection::connection(int family, int socktype, int protocol) :
         last_read(std::chrono::steady_clock::now()),
         last_write(std::chrono::steady_clock::now())
@@ -30,39 +24,80 @@ namespace util
             FATAL_ERRNO("socket create failed", errno);
         }
         socket = s;
-        open_counter++;
-        socket_counter++;
     }
 
     connection::connection(int socket) :
         socket(socket)
     {
-        open_counter++;
-        socket_counter++;
     }
 
-    connection::~connection()
+    connection::connection(const connection & conn) :
+        socket(dup(conn.get_socket()))
     {
-        int status = close(socket);
+        if (socket < 0)
+        {
+            FATAL_ERRNO("failed to duplicate socket", errno);
+        }
+    }
+
+    connection::connection(connection && conn) :
+        socket(dup(conn.get_socket()))
+    {
+        if (socket < 0)
+        {
+            FATAL_ERRNO("failed to duplicate socket", errno);
+        }
+
+        int status = close(conn.socket);
         if (status)
         {
             FATAL_ERRNO("error closing socket: " << socket, errno);
         }
-        shutdown_counter++;
-        socket_counter--;
+        conn.socket = -1;
     }
 
-    Json::Value connection::get_stats()
+    connection & connection::operator=(const connection & conn)
     {
-        Json::Value v;
+        if (this != &conn)
+        {
+            socket = dup(conn.get_socket());
+            if (socket < 0)
+            {
+                FATAL_ERRNO("failed to duplicate socket", errno);
+            }
+        }
+        return *this;
+    }
 
-        v["read"] = (Json::UInt64)read_counter.load();
-        v["written"] = (Json::UInt64)write_counter.load();
-        v["sockets"] = (Json::UInt64)socket_counter.load();
-        v["open"] = (Json::UInt64)open_counter.load();
-        v["close"] = (Json::UInt64)shutdown_counter.load();
+    connection & connection::operator=(connection && conn)
+    {
+        if (this != &conn)
+        {
+            socket = dup(conn.get_socket());
+            if (socket < 0)
+            {
+                FATAL_ERRNO("failed to duplicate socket", errno);
+            }
+            int status = close(conn.socket);
+            if (status)
+            {
+                FATAL_ERRNO("error closing socket: " << socket, errno);
+            }
+            conn.socket = -1;
+        }
+        return *this;
+    }
 
-        return v;
+    connection::~connection()
+    {
+        if (socket > -1)
+        {
+            int status = close(socket);
+            if (status)
+            {
+                FATAL_ERRNO("error closing socket: " << socket, errno);
+            }
+        }
     }
 
     bool connection::data_available(bool & available)
@@ -355,9 +390,6 @@ namespace util
 
         last_read = std::chrono::steady_clock::now();
 
-        // incr counter
-        read_counter += r;
-
         return CONNECTION_OK;
     }
 
@@ -389,9 +421,6 @@ namespace util
         written = w;
 
         last_write = std::chrono::steady_clock::now();
-
-        // incr counter
-        write_counter += w;
 
         return CONNECTION_OK;
     }

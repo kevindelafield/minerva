@@ -7,7 +7,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <jsoncpp/json/json.h>
 #include <util/log.h>
 
 namespace util
@@ -34,18 +33,18 @@ namespace util
         connection(int family, int socktype, int protocol);
         virtual ~connection();
 
+        connection(const connection & conn);
+
+        connection(connection && conn);
+
+        connection & operator=(const connection & conn);
+
+        connection & operator=(connection && conn);
+
         std::chrono::steady_clock::time_point last_read;
         std::chrono::steady_clock::time_point last_write;
 
         std::deque<char> overflow;
-
-        static Json::Value get_stats();
-
-        static std::atomic<unsigned long long> shutdown_counter;
-        static std::atomic<unsigned long long> open_counter;
-        static std::atomic<unsigned long long> read_counter;
-        static std::atomic<unsigned long long> write_counter;
-        static std::atomic<unsigned long long> socket_counter;
 
         virtual CONNECTION_STATUS read(char* buf, size_t length, ssize_t & read);
 
