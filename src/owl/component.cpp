@@ -62,7 +62,7 @@ namespace owl
         lock.unlock();
     }
     
-    util::scheduler::job_handle component::schedule_job(util::scheduler::job_element job, int ms)
+    util::scheduler::job_handle component::schedule_job(const util::scheduler::job_element & job, int ms)
     {
         return visor->schedule_job(job, ms);
     }

@@ -44,7 +44,7 @@ namespace owl
 
         void add(component * cmp);
 
-        util::scheduler::job_handle schedule_job(util::scheduler::job_element job, int milliseconds)
+        util::scheduler::job_handle schedule_job(const util::scheduler::job_element & job, int milliseconds)
         {
             return sched.schedule_job(job, std::chrono::milliseconds(milliseconds));
         }
