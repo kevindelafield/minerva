@@ -83,11 +83,15 @@ namespace util
         std::for_each(threads.begin(), threads.end(), [](std::thread* thread) {
                 thread->join();
             });
+        running = false;
+    }
+
+    void thread_pool::release()
+    {
         std::for_each(threads.begin(), threads.end(), [](std::thread* thread) {
                 delete thread;
             });
         threads.clear();
-        running = false;
     }
 
     void thread_pool::queue_work_item(work_element item)

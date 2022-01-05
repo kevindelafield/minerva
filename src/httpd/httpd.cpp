@@ -143,6 +143,8 @@ namespace httpd
 
     void httpd::start()
     {
+        component::start();
+
         start_listeners();
     }
 
@@ -155,6 +157,8 @@ namespace httpd
             delete listener.second.conn;
         }
         m_listener_sockets.clear();
+
+        component::release();
     }
 
     void httpd::hup()

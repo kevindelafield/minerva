@@ -87,5 +87,7 @@ namespace util
         void stop();
 
         void wait();
+
+        void release();
     };
 }

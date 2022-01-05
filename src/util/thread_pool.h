@@ -27,6 +27,7 @@ namespace util
         void start();
         void stop();
         void wait();
+        void release();
 
     private:
         volatile bool should_shutdown;

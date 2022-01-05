@@ -167,8 +167,13 @@ namespace util
         assert(running);
         t->join();
         tp.wait();
+        running = false;
+    }
+
+    void scheduler::release()
+    {
         delete t;
         t = NULL;
-        running = false;
+        tp.release();
     }
 }

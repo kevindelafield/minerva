@@ -148,12 +148,15 @@ namespace owl
     {
         assert(!running);
 
+        sched.release();
+
         std::for_each(components.begin(), components.end(),
                       [](auto & it) {
                           it.second->release();
                       });
 
         std::for_each(thread_pools.begin(), thread_pools.end(), [](util::thread_pool * tp) {
+            tp->release();
             delete tp;
         });
         thread_pools.clear();
