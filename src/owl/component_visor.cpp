@@ -137,16 +137,10 @@ namespace owl
         std::for_each(threads.begin(), threads.end(), [](std::thread* t) {
                 t->join();
             });
-        std::for_each(threads.begin(), threads.end(), [](std::thread* t) {
-                delete t;
-            });
-        threads.clear();
         std::for_each(thread_pools.begin(), thread_pools.end(),
                       [] (util::thread_pool * tp) {
                           tp->wait();
                       });
-        thread_pools.clear();
-
         running = false;
     }
 
@@ -158,6 +152,16 @@ namespace owl
                       [](auto & it) {
                           it.second->release();
                       });
+
+        std::for_each(thread_pools.begin(), thread_pools.end(), [](util::thread_pool * tp) {
+            delete tp;
+        });
+        thread_pools.clear();
+
+        std::for_each(threads.begin(), threads.end(), [](std::thread* t) {
+            delete t;
+        });
+        threads.clear();
     }
 
     void component_visor::hup()

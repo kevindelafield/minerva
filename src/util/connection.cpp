@@ -258,7 +258,7 @@ namespace util
     }
 
     bool connection::connect(const struct sockaddr * addr,
-                            const socklen_t addr_len)
+                             const socklen_t addr_len)
     {
         int status = ::connect(socket, addr, addr_len);
         if (status)
@@ -273,7 +273,7 @@ namespace util
     }
 
     int connection::poll(std::vector<shared_poll_fd> & fds, int timeoutMs,
-        int & err)
+                         int & err)
     {
         err = 0;
 
