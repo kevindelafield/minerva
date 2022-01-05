@@ -70,11 +70,11 @@ namespace util
     {
         lock.lock();
         should_shutdown = true;
+        lock.unlock();
         cond.notify_all();
         std::for_each(threads.begin(), threads.end(), [](std::thread* thread) {
                 pthread_kill(thread->native_handle(), SIGUSR2);
             });
-        lock.unlock();
     }
 
     void thread_pool::wait()
@@ -98,8 +98,8 @@ namespace util
     {
         lock.lock();
         work_items.emplace(item);
-        cond.notify_one();
         lock.unlock();
+        cond.notify_one();
     }
 
     void thread_pool::begin_queue_work_item()

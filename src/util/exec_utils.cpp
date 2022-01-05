@@ -183,17 +183,23 @@ namespace util
         m_terr->join();
         delete m_terr;
         m_terr = nullptr;
-        int status;
+
         if (m_debug)
         {
             LOG_INFO("waiting for pid to exit");
         }
-        waitpid(m_pid, &status, 0);
+        
+        siginfo_t info;
+        if (waitid(P_PID, m_pid, &info, WEXITED))
+        {
+            LOG_ERROR_ERRNO("failed to wait on pid", errno);
+            return 1;
+        }
         if (m_debug)
         {
             LOG_INFO("child process has exited");
         }
-        return WEXITSTATUS(status);
+        return WEXITSTATUS(info.si_status);
     }
 
     bool execl::start(int & bgid, bool nohup)
@@ -540,9 +546,14 @@ namespace util
     int execl_stream::wait()
     {
         assert(m_pid > -1);
-        int status;
-        waitpid(m_pid, &status, 0);
-        return WEXITSTATUS(status);
+
+        siginfo_t info;
+        if (waitid(P_PID, m_pid, &info, WEXITED))
+        {
+            LOG_ERROR_ERRNO("failed to wait on pid", errno);
+            return 1;
+        }
+        return WEXITSTATUS(info.si_status);
     }
 
     bool execl_stream::start(int & bgid, bool nohup)
