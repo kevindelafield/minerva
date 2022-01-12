@@ -390,7 +390,7 @@ namespace httpd
             conn->shutdown_read();
             delete conn;
         }
-                    
+        m_socket_map.clear();
     }
     
     void httpd::put_back_connection(util::connection * conn, 
