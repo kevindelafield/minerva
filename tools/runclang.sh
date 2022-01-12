@@ -1,18 +1,22 @@
 #!/bin/bash
 
-cmd="clang-8"
+cmd="clang-9"
 which $cmd > /dev/null 2>&1
 if [ "$?" -ne "0" ]; then
-   cmd="clang-7"
-   which $cmd > /dev/null 2>&1
-   if [ "$?" -ne "0" ]; then
-      cmd="clang"
-      which $cmd > /dev/null 2>&1
-      if [ "$?" -ne "0" ]; then
-      	 echo clang n  ot installed;
-	 exit 0;
-      fi
-   fi
+    cmd="clang-8"
+    which $cmd > /dev/null 2>&1
+    if [ "$?" -ne "0" ]; then
+        cmd="clang-7"
+        which $cmd > /dev/null 2>&1
+        if [ "$?" -ne "0" ]; then
+            cmd="clang"
+            which $cmd > /dev/null 2>&1
+            if [ "$?" -ne "0" ]; then
+      	        echo clang n  ot installed;
+	            exit 0;
+            fi
+        fi
+    fi
 fi
 
 echo "RUNNING CLANG: $cmd $@"
