@@ -378,6 +378,19 @@ namespace httpd
                          }, 0);
             // shutdown connections
         }
+
+        // close open sockets
+        for (auto it = m_socket_map.begin();
+             it != m_socket_map.end();
+             it++)
+        {
+            auto conn = std::get<0>(it->second);
+            conn->shutdown();
+            conn->shutdown_write();
+            conn->shutdown_read();
+            delete conn;
+        }
+                    
     }
     
     void httpd::put_back_connection(util::connection * conn, 
