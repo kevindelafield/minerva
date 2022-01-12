@@ -150,6 +150,7 @@ namespace httpd
 
     void httpd::release()
     {
+        // close listeners
         for (auto listener : m_listener_sockets)
         {
             listener.second.conn->shutdown_write();
@@ -157,6 +158,19 @@ namespace httpd
             delete listener.second.conn;
         }
         m_listener_sockets.clear();
+
+        // close open sockets
+        for (auto it = m_socket_map.begin();
+             it != m_socket_map.end();
+             it++)
+        {
+            auto conn = std::get<0>(it->second);
+            conn->shutdown();
+            conn->shutdown_write();
+            conn->shutdown_read();
+            delete conn;
+        }
+        m_socket_map.clear();
 
         component::release();
     }
@@ -378,19 +392,6 @@ namespace httpd
                          }, 0);
             // shutdown connections
         }
-
-        // close open sockets
-        for (auto it = m_socket_map.begin();
-             it != m_socket_map.end();
-             it++)
-        {
-            auto conn = std::get<0>(it->second);
-            conn->shutdown();
-            conn->shutdown_write();
-            conn->shutdown_read();
-            delete conn;
-        }
-        m_socket_map.clear();
     }
     
     void httpd::put_back_connection(util::connection * conn, 
