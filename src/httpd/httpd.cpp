@@ -286,13 +286,17 @@ namespace httpd
                 {
                     return;
                 }
+
                 // timeout anything older than 90 seconds
+
+                std::vector<int> to_erase;
+
                 for (auto it = m_socket_map.begin();
                      it != m_socket_map.end();
                      it++)
                 {
                     auto conn = std::get<0>(it->second);
-                    
+
                     if (std::chrono::steady_clock::now() - conn->last_read >
                         std::chrono::seconds(90))
                     {
@@ -301,9 +305,15 @@ namespace httpd
                         
                         to_close.push_back(conn);
                         
-                        m_socket_map.erase(it);
+                        to_erase.emplace_back(it->first);
                     }
                 }
+
+                for (auto s : to_erase)
+                {
+                    m_socket_map.erase(s);
+                }
+
                 map = m_socket_map;
             }
 

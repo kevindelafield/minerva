@@ -25,7 +25,8 @@ namespace owl
         assert(!running);
         assert(cmp);
         LOG_DEBUG("adding component: " << cmp->name());
-        components[cmp->name()] = std::unique_ptr<component>(std::move(cmp));
+        components.emplace(cmp->name(),
+                           std::move(std::unique_ptr<component>(cmp)));
         cmp->visor = this;
     }
 
@@ -87,19 +88,16 @@ namespace owl
 
     void component_visor::stop()
     {
+        std::unique_lock<std::mutex> lk(lock);
+
+        if (m_stopped)
+        {
+            return;
+        }
+
         m_should_shutdown = true;
 
         sched.stop();
-
-        std::for_each(threads.begin(), threads.end(),
-                      [] (std::thread *thread) {
-                          pthread_kill(thread->native_handle(), SIGUSR2);
-                      });
-
-        std::for_each(threads.begin(), threads.end(),
-                      [] (std::thread *thread) {
-                          pthread_kill(thread->native_handle(), SIGUSR2);
-                      });
 
         std::for_each(components.begin(), components.end(),
                       [](auto & it) {
@@ -110,7 +108,6 @@ namespace owl
                           tp->stop();
                       });
 
-        std::unique_lock<std::mutex> lk(lock);
         m_stopped = true;
         cond.notify_all();
     }

@@ -25,7 +25,6 @@ owl::component_visor & kv()
     return kv;
 }
 
-static bool stopped = false;
 static std::string config_file;
 static std::mutex hup_mutex;
 
@@ -35,84 +34,76 @@ static void shutdown_signal_handler(int signal)
 {
     LOG_INFO("stopping...");
 
-    if (!stopped)
-    {
-        stopped = true;
-
-        // set a timer to kill the process if it hasn't stopped after 7 seconds
-        struct sigevent te;
-        timer_t timer;
-        struct itimerspec its;
-
-        te.sigev_notify = SIGEV_SIGNAL;
-        te.sigev_signo = SIGKILL;
-
-        timer_create(CLOCK_MONOTONIC, &te, &timer);
-
-        its.it_interval.tv_sec = 0;
-        its.it_interval.tv_nsec = 0;
-        its.it_value.tv_sec = 5;
-        its.it_value.tv_nsec = 0;
-
-        timer_settime(timer, 0, &its, nullptr);
-
-        // stop the visor
-        std::thread t([]() {
-                kv().stop();
-            });
-        t.detach();
-    }
+    // set a timer to kill the process if it hasn't stopped after 7 seconds
+    struct sigevent te;
+    timer_t timer;
+    struct itimerspec its;
+    
+    te.sigev_notify = SIGEV_SIGNAL;
+    te.sigev_signo = SIGKILL;
+    
+    timer_create(CLOCK_MONOTONIC, &te, &timer);
+    
+    its.it_interval.tv_sec = 0;
+    its.it_interval.tv_nsec = 0;
+    its.it_value.tv_sec = 5;
+    its.it_value.tv_nsec = 0;
+    
+    timer_settime(timer, 0, &its, nullptr);
+    
+    // stop the visor
+    std::thread t([]() {
+        kv().stop();
+    });
+    t.detach();
 }
 
 static void hup_handler(int signal)
 {
     LOG_INFO("handling SIGHUP...");
-    if (!stopped)
-    {
-        std::thread t([]() {
-                          
-                          std::unique_lock<std::mutex> lk(hup_mutex);
-
-                          std::ifstream cf(config_file);
-                          Json::Value config;
-                          if (!util::parse_json(cf, config))
-                          {
-                              LOG_ERROR("the config file " << config_file << " is not valid json");
-                              return;
-                          }
-
-                          auto httpd =
-                              kv().get_component<httpd::httpd>(httpd::httpd::NAME);
-
-                          if (!httpd)
-                          {
-                              return;
-                          }
-
-                          LOG_INFO("resetting httpd ports: " << config);
-
-                          httpd->clear_listeners();
-
-                          LOG_INFO("post clear listeners");
-
-                          if (config.isMember("http.port") && config["http.port"].isInt())
-                          {
-                              int port = config["http.port"].asInt();
-                              LOG_INFO("adding http port: " << port);
-                              httpd->add_listener(httpd::httpd::PROTOCOL::HTTP, port);
-                          }
-                          
-                          if (config.isMember("https.port") && config["https.port"].isInt());
-                          {
-                              int port = config["https.port"].asInt();
-                              LOG_INFO("adding https port: " << port);
-                              httpd->add_listener(httpd::httpd::PROTOCOL::HTTPS, port);
-                          }
-                          
-                          kv().hup();
-                      });
-        t.detach();
-    }
+    std::thread t([]() {
+        
+        std::unique_lock<std::mutex> lk(hup_mutex);
+        
+        std::ifstream cf(config_file);
+        Json::Value config;
+        if (!util::parse_json(cf, config))
+        {
+            LOG_ERROR("the config file " << config_file << " is not valid json");
+            return;
+        }
+        
+        auto httpd =
+            kv().get_component<httpd::httpd>(httpd::httpd::NAME);
+        
+        if (!httpd)
+        {
+            return;
+        }
+        
+        LOG_INFO("resetting httpd ports: " << config);
+        
+        httpd->clear_listeners();
+        
+        LOG_INFO("post clear listeners");
+        
+        if (config.isMember("http.port") && config["http.port"].isInt())
+        {
+            int port = config["http.port"].asInt();
+            LOG_INFO("adding http port: " << port);
+            httpd->add_listener(httpd::httpd::PROTOCOL::HTTP, port);
+        }
+        
+        if (config.isMember("https.port") && config["https.port"].isInt());
+        {
+            int port = config["https.port"].asInt();
+            LOG_INFO("adding https port: " << port);
+            httpd->add_listener(httpd::httpd::PROTOCOL::HTTPS, port);
+        }
+        
+        kv().hup();
+    });
+    t.detach();
 }
 
 static void null_handler(int signal)

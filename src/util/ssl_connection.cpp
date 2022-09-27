@@ -97,7 +97,6 @@ namespace util
     {
         SSL_library_init();
         SSL_load_error_strings();
-        ERR_load_BIO_strings();
         OpenSSL_add_all_algorithms();
 
         m_ssl_ctx = SSL_CTX_new(TLS_server_method());

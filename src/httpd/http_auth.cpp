@@ -1,3 +1,5 @@
+#define OPENSSL_API_COMPAT 0x10100000L
+
 #include <sstream>
 #include <cstring>
 #include <regex>

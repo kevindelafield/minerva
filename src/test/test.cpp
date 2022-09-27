@@ -22,7 +22,6 @@
 #include <util/unique_command.h>
 #include <util/connection.h>
 #include <curl/curl.h>
-#include <pugixml.hpp>
 
 int main(int argc, char** argv)
 {
