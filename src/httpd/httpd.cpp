@@ -303,7 +303,7 @@ namespace httpd
                         LOG_DEBUG("shutting down idle connection: " <<
                                   conn->get_socket());
                         
-                        to_close.push_back(conn);
+                        to_close.emplace_back(conn);
                         
                         to_erase.emplace_back(it->first);
                     }
