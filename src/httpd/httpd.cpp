@@ -20,7 +20,7 @@
 #include "http_content_type.h"
 #include "controller.h"
 
-namespace httpd
+namespace minerva
 {
 
     httpd::httpd() : m_active_count(0),
@@ -83,16 +83,16 @@ namespace httpd
 
         for (auto & listener : m_listeners)
         {
-            util::connection * conn;
+            connection * conn;
             if (listener.protocol == httpd::PROTOCOL::HTTP)
             {
                 conn =
-                    new util::connection(AF_INET6,
+                    new connection(AF_INET6,
                                          SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
             }
             else if (listener.protocol == httpd::PROTOCOL::HTTPS)
             {
-                conn = static_cast<util::connection *>(new util::ssl_connection(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+                conn = static_cast<connection *>(new ssl_connection(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
             }
             else
             {
@@ -198,7 +198,7 @@ namespace httpd
         }
     }
 
-    void httpd::shutdown_write_async(util::connection * conn)
+    void httpd::shutdown_write_async(connection * conn)
     {
         schedule_job([this, conn]()
                      {
@@ -208,9 +208,9 @@ namespace httpd
                      }, 0);
     }
 
-    bool httpd::shutdown(util::connection * conn)
+    bool httpd::shutdown(connection * conn)
     {
-        util::timer timer(true);
+        timer timer(true);
 
         while (!should_shutdown() && timer.get_elapsed_milliseconds() < 15000)
         {
@@ -219,27 +219,27 @@ namespace httpd
             auto status = conn->shutdown();
             switch (status)
             {
-            case util::connection::CONNECTION_STATUS::CONNECTION_OK:
+            case connection::CONNECTION_STATUS::CONNECTION_OK:
             {
                 return true;
             }
             break;
-            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
+            case connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
             {
                 reading = true;
             }
             break;
-            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
+            case connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
             {
                 reading = false;
             }
             break;
-            case util::connection::CONNECTION_STATUS::CONNECTION_CLOSED:
+            case connection::CONNECTION_STATUS::CONNECTION_CLOSED:
             {
                 return false;
             }
             break;
-            case util::connection::CONNECTION_STATUS::CONNECTION_ERROR:
+            case connection::CONNECTION_STATUS::CONNECTION_ERROR:
             {
                 LOG_DEBUG("failed to terminate connection");
                 return false;
@@ -271,9 +271,9 @@ namespace httpd
     {
         while (!should_shutdown())
         {
-            std::map<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> map;
-            std::vector<util::connection::shared_poll_fd> fds;
-            std::vector<util::connection *> to_close;
+            std::map<int, std::tuple<connection *, struct sockaddr_in, socklen_t>> map;
+            std::vector<connection::shared_poll_fd> fds;
+            std::vector<connection *> to_close;
             
             // wait for sockets or a shutdown
             {
@@ -318,16 +318,16 @@ namespace httpd
             }
 
             std::for_each(map.begin(), map.end(),
-                          [&fds](std::pair<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> item)
+                          [&fds](std::pair<int, std::tuple<connection *, struct sockaddr_in, socklen_t>> item)
                           {
-                              fds.push_back(util::connection::shared_poll_fd(item.first,
+                              fds.push_back(connection::shared_poll_fd(item.first,
                                                                        true,
                                                                        false,
                                                                        true));
                           });
 
             int err;
-            int status = util::connection::poll(fds, 10, err);
+            int status = connection::poll(fds, 10, err);
             if (status == 0)
             {
                 continue;
@@ -404,7 +404,7 @@ namespace httpd
         }
     }
     
-    void httpd::put_back_connection(util::connection * conn, 
+    void httpd::put_back_connection(connection * conn, 
                                     const sockaddr_in & addr, 
                                     socklen_t addr_len)
     {
@@ -422,7 +422,7 @@ namespace httpd
 
         while (!should_shutdown())
         {
-            std::vector<util::connection::shared_poll_fd> fds;
+            std::vector<connection::shared_poll_fd> fds;
 
             {
                 std::unique_lock<std::mutex> lk(m_listener_lock);
@@ -439,14 +439,14 @@ namespace httpd
 
             for (auto & socket : m_listener_sockets)
             {
-                fds.push_back(util::connection::shared_poll_fd(socket.first,
+                fds.push_back(connection::shared_poll_fd(socket.first,
                                                          true,
                                                          false,
                                                          true));
             }
             
             int err;
-            int status = util::connection::poll(fds, polling_period_ms, err);
+            int status = connection::poll(fds, polling_period_ms, err);
             if (status == 0)
             {
                 continue;
@@ -505,9 +505,9 @@ namespace httpd
                 LOG_DEBUG("Accept Successful: " << http);
                 
                 // queue up request
-                util::connection * conn = http ?
-                    new util::connection(s) :
-                    static_cast<util::connection *>(new util::ssl_connection(s));
+                connection * conn = http ?
+                    new connection(s) :
+                    static_cast<connection *>(new ssl_connection(s));
                 assert(conn);
                 
                 schedule_job([this, conn, addr, addr_len]()
@@ -531,9 +531,9 @@ namespace httpd
         
     }
 
-    bool httpd::accept(util::connection * conn)
+    bool httpd::accept(connection * conn)
     {
-        util::timer timer(true);
+        timer timer(true);
         bool accepted = false;
         bool done = false;
         while (!done &&
@@ -544,29 +544,29 @@ namespace httpd
             auto ssl_status = conn->accept_ssl();
             switch (ssl_status)
             {
-            case util::connection::CONNECTION_STATUS::CONNECTION_OK:
+            case connection::CONNECTION_STATUS::CONNECTION_OK:
             {
                 accepted = true;
                 done = true;
                 break;
             }
             break;
-            case util::connection::CONNECTION_STATUS::CONNECTION_CLOSED:
+            case connection::CONNECTION_STATUS::CONNECTION_CLOSED:
             {
                 LOG_DEBUG("connection closed during tls negotiation");
                 done = true;
                 break;
             }
-            case util::connection::CONNECTION_STATUS::CONNECTION_ERROR:
+            case connection::CONNECTION_STATUS::CONNECTION_ERROR:
             {
                 LOG_DEBUG("error during tls negotiation");
                 done = true;
                 break;
             }
-            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
-            case util::connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
+            case connection::CONNECTION_STATUS::CONNECTION_WANTS_READ:
+            case connection::CONNECTION_STATUS::CONNECTION_WANTS_WRITE:
             {
-                bool read = ssl_status == util::connection::CONNECTION_STATUS::CONNECTION_WANTS_READ;
+                bool read = ssl_status == connection::CONNECTION_STATUS::CONNECTION_WANTS_READ;
                 bool write = !read;
                 bool error = true;
 
@@ -645,7 +645,7 @@ namespace httpd
 
     constexpr static size_t BUFFER_SIZE = 100*1024;
 
-    void httpd::handle_request(util::connection * conn,
+    void httpd::handle_request(connection * conn,
                                const struct sockaddr_in & addr, 
                                socklen_t addr_len)
     {
@@ -759,21 +759,21 @@ namespace httpd
                                         sizeof(tmpbuf)), read);
                 switch (status)
                 {
-                case util::connection::CONNECTION_ERROR:
+                case connection::CONNECTION_ERROR:
                 {
                     abrt = true;
                     LOG_WARN_ERRNO("Http client timeout or socket read error",
                                    errno);
                 }
                 break;
-                case util::connection::CONNECTION_CLOSED:
+                case connection::CONNECTION_CLOSED:
                 {
                     abrt = true;
                     // don't log warnings for close after keep-alive
                     LOG_WARN("Http client disconnected unexpectedly");
                 }
                 break;
-                case util::connection::CONNECTION_OK:
+                case connection::CONNECTION_OK:
                 {
                     if (read == 0)
                     {
@@ -788,13 +788,13 @@ namespace httpd
                     }
                 }
                 break;
-                case util::connection::CONNECTION_WANTS_READ:
+                case connection::CONNECTION_WANTS_READ:
                 {
                     reading = true;
                     abrt = false;
                 }
                 break;
-                case util::connection::CONNECTION_WANTS_WRITE:
+                case connection::CONNECTION_WANTS_WRITE:
                 {
                     reading = false;
                     abrt = false;

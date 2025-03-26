@@ -4,7 +4,7 @@
 #include "http_context.h"
 #include "http_request.h"
 
-namespace httpd
+namespace minerva
 {
     class http_auth_user
     {

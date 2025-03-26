@@ -4,7 +4,7 @@
 #include <util/log.h>
 #include "auth_db.h"
 
-namespace authdb
+namespace minerva
 {
     bool auth_db::initialize()
     {
@@ -48,7 +48,7 @@ namespace authdb
                 return false;
             }
 
-            m_user_map[user] = httpd::http_auth_user(user, realm, hash);
+            m_user_map[user] = minerva::http_auth_user(user, realm, hash);
 
             std::getline(is, line);
         }
@@ -59,7 +59,7 @@ namespace authdb
     }
 
     bool auth_db::find_user(const std::string & username,
-                            httpd::http_auth_user & user)
+                            minerva::http_auth_user & user)
     {
         assert(m_initialized);
 
@@ -76,7 +76,7 @@ namespace authdb
 
     bool auth_db::write_map() const
     {
-        util::safe_ofstream os(m_webpass);
+        minerva::safe_ofstream os(m_webpass);
 
         if (!os.is_open())
         {
@@ -108,9 +108,9 @@ namespace authdb
 
         std::unique_lock<std::mutex> lk(m_lock);
 
-        std::string hash = httpd::digest_hash_md5(username, realm, password);
+        std::string hash = minerva::digest_hash_md5(username, realm, password);
 
-        m_user_map[username] = httpd::http_auth_user(username, realm, hash);
+        m_user_map[username] = minerva::http_auth_user(username, realm, hash);
 
         if (!write_map())
         {

@@ -5,17 +5,18 @@
 #include <functional>
 #include <chrono>
 #include <util/log.h>
+#include <util/thread_pool.h>
 #include "component.h"
 #include "component_visor.h"
 
-namespace owl
+namespace minerva
 {
     component * component::get_component_internal(const std::string & name) const
     {
         return visor->get_component<component>(name);
     }
     
-    util::thread_pool * component::add_thread_pool(int count)
+    minerva::thread_pool * component::add_thread_pool(int count)
     {
         return visor->add_thread_pool(count);
     }
@@ -62,12 +63,12 @@ namespace owl
         lock.unlock();
     }
     
-    util::scheduler::job_handle component::schedule_job(const util::scheduler::job_element & job, int ms)
+    minerva::scheduler::job_handle component::schedule_job(const minerva::scheduler::job_element & job, int ms)
     {
         return visor->schedule_job(job, ms);
     }
 
-    bool component::cancel_job(const util::scheduler::job_handle & handle)
+    bool component::cancel_job(const minerva::scheduler::job_handle & handle)
     {
         return visor->cancel_job(handle);
     }

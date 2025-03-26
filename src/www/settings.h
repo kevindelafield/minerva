@@ -3,7 +3,7 @@
 #include <string>
 #include <util/log.h>
 
-namespace www
+namespace minerva
 {
 
     class settings
@@ -22,7 +22,7 @@ namespace www
 
         std::string pw_override;
         std::string config_file;
-        util::log::LOG_LEVEL log_level = util::log::INFO;
+        minerva::log::LOG_LEVEL log_level = minerva::log::INFO;
         bool print_version = false;
     };
 }

@@ -8,7 +8,7 @@
 #include "http_request.h"
 #include "http_response.h"
 
-namespace httpd
+namespace minerva
 {
 
     class controller
@@ -109,7 +109,7 @@ namespace httpd
     private:
 
         bool m_require_authorization = true;
-        std::map<std::string, std::function<void(http_context & ctx)>, util::ci_less> m_handlers;
+        std::map<std::string, std::function<void(http_context & ctx)>, minerva::ci_less> m_handlers;
     };
 
 #define REGISTER_HANDLER(name, func)                        \

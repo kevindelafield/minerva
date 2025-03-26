@@ -17,7 +17,7 @@
 #include <util/string_utils.h>
 #include "http_auth.h"
 
-namespace httpd
+namespace minerva
 {
     enum http_auth_digest_type {
         HTTP_AUTH_DIGEST_NONE       = 0
@@ -495,8 +495,8 @@ namespace httpd
 
             std::string key = part.substr(0, pos);
             std::string value = part.substr(pos+1);
-            util::trim(key, " ");
-            util::trim(value, "\" ");
+            trim(key, " ");
+            trim(value, "\" ");
 
             if (key == "username")
             {
@@ -702,7 +702,7 @@ namespace httpd
         // base 64 decode the credentials
         std::string buf;
         // Base64 decode the basic auth string
-        if (!util::from64tobits(part, buf))
+        if (!from64tobits(part, buf))
         {
             LOG_ERROR("Failed to base64 decode HTTP Basic auth header");
             ctx.response().add_header("WWW-Authenticate", "Basic");

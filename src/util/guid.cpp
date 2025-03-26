@@ -2,7 +2,7 @@
 
 #include <uuid/uuid.h>
 
-namespace util
+namespace minerva
 {
     std::string new_guid()
     {

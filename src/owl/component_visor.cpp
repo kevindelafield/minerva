@@ -7,7 +7,7 @@
 #include <util/file_utils.h>
 #include "component_visor.h"
 
-namespace owl
+namespace minerva
 {
 
     component_visor::component_visor() : running(false), 
@@ -76,10 +76,9 @@ namespace owl
 
         // start thread pools
         std::for_each(thread_pools.begin(), thread_pools.end(),
-                      [] (util::thread_pool * tp) {
+                      [] (minerva::thread_pool * tp) {
                           tp->start();
                       });
-
 
         sched.start();
 
@@ -104,7 +103,7 @@ namespace owl
                           it.second->stop();
                       });
         std::for_each(thread_pools.begin(), thread_pools.end(),
-                      [] (util::thread_pool * tp) {
+                      [] (minerva::thread_pool * tp) {
                           tp->stop();
                       });
 
@@ -135,7 +134,7 @@ namespace owl
                 t->join();
             });
         std::for_each(thread_pools.begin(), thread_pools.end(),
-                      [] (util::thread_pool * tp) {
+                      [] (minerva::thread_pool * tp) {
                           tp->wait();
                       });
         running = false;
@@ -152,7 +151,7 @@ namespace owl
                           it.second->release();
                       });
 
-        std::for_each(thread_pools.begin(), thread_pools.end(), [](util::thread_pool * tp) {
+        std::for_each(thread_pools.begin(), thread_pools.end(), [](minerva::thread_pool * tp) {
             tp->release();
             delete tp;
         });

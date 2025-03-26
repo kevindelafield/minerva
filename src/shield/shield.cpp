@@ -35,7 +35,7 @@ int main(int argc, char ** argv)
         std::string password(argv[4]);
         std::string file(argv[5]);
 
-        authdb::auth_db db(realm, file);
+        minerva::auth_db db(realm, file);
         if (!db.initialize())
         {
             LOG_ERROR("failed to load auth db");
@@ -62,7 +62,7 @@ int main(int argc, char ** argv)
         std::string user(argv[3]);
         std::string file(argv[4]);
 
-        authdb::auth_db db(realm, file);
+        minerva::auth_db db(realm, file);
         if (!db.initialize())
         {
             LOG_ERROR("failed to load auth db");

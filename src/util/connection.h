@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <util/log.h>
 
-namespace util
+namespace minerva
 {
 
     class connection

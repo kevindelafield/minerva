@@ -2,9 +2,7 @@
 
 #include <string>
 
-namespace util
+namespace minerva
 {
-
     std::string new_guid();
-
 }

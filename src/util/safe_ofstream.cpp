@@ -4,7 +4,7 @@
 #include "log.h"
 #include "safe_ofstream.h"
 
-namespace util
+namespace minerva
 {
     safe_ofstream::~safe_ofstream()
     {

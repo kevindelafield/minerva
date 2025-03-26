@@ -3,9 +3,10 @@
 #include <mutex>
 #include <condition_variable>
 #include <cassert>
+#include <string>
 #include "file_lock.h"
 
-namespace util
+namespace minerva
 {
     class exclusive_file_lock : public file_lock
     {

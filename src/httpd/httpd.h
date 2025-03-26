@@ -16,14 +16,14 @@
 #include "http_response.h"
 #include "http_auth.h"
 
-namespace httpd
+namespace minerva
 {
 
     class component;
 
     class controller;
 
-    class httpd : public owl::component
+    class httpd : public component
     {
     public:
 
@@ -102,12 +102,12 @@ namespace httpd
 
             PROTOCOL protocol = PROTOCOL::HTTP;
             int port = 80;
-            util::connection * conn;
+            connection * conn;
         };
 
         void start_listeners();
 
-        util::thread_pool * handler_thread_pool;
+        thread_pool * handler_thread_pool;
         std::unordered_map<std::string, controller*> controller_map;
         controller* m_default_controller = nullptr;
         std::atomic<unsigned long long> m_active_count;
@@ -124,21 +124,21 @@ namespace httpd
         std::mutex m_log_lock;
         std::deque<std::string> m_cgi_log;
     
-        std::map<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> m_socket_map;
+        std::map<int, std::tuple<connection *, struct sockaddr_in, socklen_t>> m_socket_map;
 
         void log(http_context & ctx, const std::string & date);
 
-        bool accept(util::connection * conn);
+        bool accept(connection * conn);
         
-        bool shutdown(util::connection * conn);
+        bool shutdown(connection * conn);
 
-        void shutdown_write_async(util::connection * conn);
+        void shutdown_write_async(connection * conn);
         
-        void put_back_connection(util::connection * conn,
+        void put_back_connection(connection * conn,
                                  const sockaddr_in & addr, 
                                  socklen_t addr_len);
 
-        void handle_request(util::connection * conn, 
+        void handle_request(connection * conn, 
                             const struct sockaddr_in & addr, 
                             socklen_t addr_len);
     

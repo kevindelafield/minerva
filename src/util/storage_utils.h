@@ -2,7 +2,10 @@
 
 #include <string>
 
-namespace util
+namespace minerva
 {
-     long get_free_space(const std::string & path);
+    namespace storage_utils
+    {
+        long get_free_space(const std::string & path);
+    }
 }

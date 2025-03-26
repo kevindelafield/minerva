@@ -9,7 +9,7 @@
 #include <functional>
 #include "thread_pool.h"
 
-namespace util
+namespace minerva
 {
 
     class scheduler

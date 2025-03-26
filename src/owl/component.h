@@ -8,7 +8,7 @@
 #include <util/thread_pool.h>
 #include <util/scheduler.h>
 
-namespace owl
+namespace minerva
 {
 
     class component_visor;
@@ -52,13 +52,13 @@ namespace owl
         std::mutex lock;
         std::condition_variable cond;
         
-        util::thread_pool * add_thread_pool(int count);
+        minerva::thread_pool * add_thread_pool(int count);
 
         void add_thread(const std::function<void()> &);
         
-        util::scheduler::job_handle schedule_job(const util::scheduler::job_element & job, int ms);
+        minerva::scheduler::job_handle schedule_job(const minerva::scheduler::job_element & job, int ms);
         
-        bool cancel_job(const util::scheduler::job_handle & handle);
+        bool cancel_job(const minerva::scheduler::job_handle & handle);
 
     private:
         friend class component_visor;

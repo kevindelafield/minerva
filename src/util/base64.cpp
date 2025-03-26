@@ -7,7 +7,7 @@
 #include "base64.h"
 #include "log.h"
 
-namespace util
+namespace minerva
 {
 
     static const char base64digits[] =

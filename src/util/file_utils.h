@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-namespace util
+namespace minerva
 {
     bool file_exists(const std::string & path);
 
@@ -38,7 +38,6 @@ namespace util
     constexpr const char* short_file_name(const char* str) {
         return str_slant(str) ? r_slant(str_end(str)) : str;
     }
-    
 }
 
-#define __SHORT_FILE__ util::short_file_name(__FILE__)
+#define __SHORT_FILE__ minerva::short_file_name(__FILE__)

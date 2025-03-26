@@ -5,7 +5,7 @@
 #include <openssl/err.h>
 #include "ssl_connection.h"
 
-namespace util
+namespace minerva
 {
     static void log_ssl_errors()
     {

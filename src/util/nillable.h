@@ -1,8 +1,9 @@
 #pragma once
 
 #include <cassert>
+#include <optional>
 
-namespace util
+namespace minerva
 {
 
     template<class T>

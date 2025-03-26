@@ -9,7 +9,7 @@
 #include "http_context.h"
 #include "http_request.h"
 
-namespace httpd
+namespace minerva
 {
 
     static const char* firstLineRegex = "^(.+)\\s+(.+)\\s+HTTP/(1.0|1.1)\r$";
@@ -214,7 +214,7 @@ namespace httpd
             m_headers[key] = value;
         
             // for content length - set it here
-            if (util::ci_equals(key, content_length))
+            if (minerva::ci_equals(key, content_length))
             {
                 if (!is_number(value))
                 {
@@ -254,23 +254,23 @@ namespace httpd
             }
         
             // for content type - set it here
-            else if (util::ci_equals(key, content_type))
+            else if (minerva::ci_equals(key, content_type))
             {
                 m_content_type = http_content_type::parse(value);
             }
             // for connection - set it here
-            else if (util::ci_equals(key, connectionKey))
+            else if (minerva::ci_equals(key, connectionKey))
             {
-                m_keep_alive = util::ci_equals(value, keepAlive);
+                m_keep_alive = minerva::ci_equals(value, keepAlive);
             }
             // for connection - set it here
-            else if (util::ci_equals(key, expectKey))
+            else if (minerva::ci_equals(key, expectKey))
             {
-                m_continue_100 = util::ci_equals(value, continue100);
+                m_continue_100 = minerva::ci_equals(value, continue100);
             }
-            else if (util::ci_equals(key, "transfer-encoding"))
+            else if (minerva::ci_equals(key, "transfer-encoding"))
             {
-                if (util::ci_equals(value, "chunked"))
+                if (minerva::ci_equals(value, "chunked"))
                 {
                     m_chunked = true;
                 }
@@ -323,7 +323,7 @@ namespace httpd
 
         m_overflow.clear();
 
-        util::timer _timer(true);
+        minerva::timer _timer(true);
 
         while (left > 0)
         {
@@ -339,7 +339,7 @@ namespace httpd
 
     std::istream & http_request::read_fully_chunked(int timeoutMs)
     {
-        util::timer _timer(true);
+        minerva::timer _timer(true);
 
         while (m_chunk_state != CHUNK_STATE::DONE)
         {
@@ -529,7 +529,7 @@ namespace httpd
 
         buffer.clear();
 
-        util::timer _timer(true);
+        minerva::timer _timer(true);
 
         if (m_chunk_state != CHUNK_STATE::READING_CHUNK_HEADER &&
             m_chunk_state != CHUNK_STATE::READING_END &&
@@ -791,7 +791,7 @@ namespace httpd
             return 0;
         }
 
-        util::timer _timer(true);
+        minerva::timer _timer(true);
         size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
         m_total_read += read;
     
@@ -800,7 +800,7 @@ namespace httpd
 
     size_t http_request::read_chunked(char * buf, size_t len, int timeoutMs)
     {
-        util::timer _timer(true);
+        minerva::timer _timer(true);
 
         while (m_chunk_state != CHUNK_STATE::DONE)
         {
@@ -1002,7 +1002,7 @@ namespace httpd
         size_t left = m_content_length - m_total_read - m_overflow.size();
 
         char buf[64*1024];
-        util::timer timer(true);
+        minerva::timer timer(true);
         size_t to_read = std::min(left, sizeof(buf));
         try
         {
@@ -1023,7 +1023,7 @@ namespace httpd
 
     bool http_request::null_body_read_chunked(int timeoutMs)
     {
-        util::timer _timer(true);
+        minerva::timer _timer(true);
 
         try
         {
@@ -1214,7 +1214,7 @@ namespace httpd
     }
 
     size_t http_request::read_from_socket(char * buf, size_t len,
-                                          util::timer & timer,
+                                          minerva::timer & timer,
                                           int timeoutMs)
     {
         bool reading = true;
@@ -1275,20 +1275,20 @@ namespace httpd
                 m_ctx->conn()->read(buf, len, read);
             switch (status)
             {
-            case util::connection::CONNECTION_ERROR:
+            case minerva::connection::CONNECTION_ERROR:
             {
                 LOG_DEBUG_ERRNO("Http client timeout or socket read error",
                                 errno);
                 throw http_exception("read error");
             }
             break;
-            case util::connection::CONNECTION_CLOSED:
+            case minerva::connection::CONNECTION_CLOSED:
             {
                 LOG_DEBUG("Http client disconnected unexpectedly");
                 throw http_exception("connection closed");
             }
             break;
-            case util::connection::CONNECTION_OK:
+            case minerva::connection::CONNECTION_OK:
             {
                 if (read == 0)
                 {
@@ -1301,12 +1301,12 @@ namespace httpd
                 }
                 break;
             }
-            case util::connection::CONNECTION_WANTS_READ:
+            case minerva::connection::CONNECTION_WANTS_READ:
             {
                 reading = true;
             }
             break;
-            case util::connection::CONNECTION_WANTS_WRITE:
+            case minerva::connection::CONNECTION_WANTS_WRITE:
             {
                 reading = false;
             }

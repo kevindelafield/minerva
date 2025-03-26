@@ -1,6 +1,6 @@
 #include "http_content_type.h"
 
-namespace httpd
+namespace minerva
 {
 
     const char * http_content_type::get_content_type_string(code code)

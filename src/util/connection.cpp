@@ -11,7 +11,7 @@
 #include <util/log.h>
 #include "connection.h"
 
-namespace util
+namespace minerva
 {
 
     connection::connection(int family, int socktype, int protocol) :

@@ -3,9 +3,9 @@
 #include <string>
 #include <algorithm>
 
-namespace util
+namespace minerva
 {
-        // case-independent (ci) compare_less binary function
+    // case-independent (ci) compare_less binary function
     struct nocase_compare
     {
         bool operator() (const unsigned char& c1,
@@ -112,14 +112,12 @@ namespace util
                        return (c1 == c2 ||std::toupper(c1) == std::toupper(c2));
                    });
     }
-        
 
     inline std::string& ltrim(std::string& str, const std::string& chars = "\t\n\v\f\r ")
     {
         auto pos = str.find_first_not_of(chars);
         if (pos != std::string::npos)
         {
-
             str.erase(0, pos);
         }
         return str;

@@ -8,13 +8,13 @@
 #include "http_request.h"
 #include "http_response.h"
 
-namespace httpd
+namespace minerva
 {
     class http_context
     {
     public:
 
-        http_context(util::connection * conn, std::function<bool()> sdCb)
+        http_context(connection * conn, std::function<bool()> sdCb)
         : m_request(this), m_response(this), m_conn(conn), m_timer(true),
           m_sd_cb(sdCb)
             {
@@ -23,7 +23,7 @@ namespace httpd
 
         ~http_context() = default;
 
-        util::nillable<std::function<void()>> post_command() const
+        nillable<std::function<void()>> post_command() const
         {
             return m_post_command;
         }
@@ -57,7 +57,7 @@ namespace httpd
             return m_username;
         }
 
-        void post_command(const util::nillable<std::function<void()>> & cmd)
+        void post_command(const nillable<std::function<void()>> & cmd)
         {
             m_post_command = cmd;
         }
@@ -72,7 +72,7 @@ namespace httpd
             return m_response;
         }
 
-        util::connection * conn() const
+        connection * conn() const
         {
             return m_conn;
         }
@@ -106,15 +106,15 @@ namespace httpd
         const int DEFAULT_TIMEOUT = 60000;
         http_request m_request;
         http_response m_response;
-        util::connection * m_conn;
+        connection * m_conn;
         std::string m_username;
         std::string m_client_ip;
         struct sockaddr_in m_client_addr;
         socklen_t m_client_addr_len;
         int m_timeout_msecs = DEFAULT_TIMEOUT;
-        util::timer m_timer;
+        minerva::timer m_timer;
         std::function<bool()> m_sd_cb;
-        util::nillable<std::function<void()>> m_post_command;
+        nillable<std::function<void()>> m_post_command;
 
     };
 }

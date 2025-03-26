@@ -5,8 +5,10 @@
 #include <semaphore.h>
 #include <string>
 #include "log.h"
+#include <mutex>
+#include <condition_variable>
 
-namespace util
+namespace minerva
 {
     class named_semaphore
     {

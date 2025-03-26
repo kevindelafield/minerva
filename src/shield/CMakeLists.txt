@@ -8,4 +8,4 @@ FILE (GLOB APP_SRC "*.cpp")
 
 add_executable(shield ${APP_SRC} ${APP_INCLUDE})
 
-target_link_libraries(shield authdb owl)
+target_link_libraries(shield authdb owl util)

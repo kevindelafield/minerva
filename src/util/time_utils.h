@@ -9,7 +9,7 @@
 #include <string>
 #include <time.h>
 
-namespace util
+namespace minerva
 {
     std::string ctime(const std::time_t & time);
 
@@ -75,5 +75,4 @@ namespace util
         time_point stop_time;
         bool m_is_running;
     };
-
 }

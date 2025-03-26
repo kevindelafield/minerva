@@ -17,11 +17,11 @@
 #include "file_server.h"
 #include "settings.h"
 
-using namespace www;
+using namespace minerva;
 
-owl::component_visor & kv()
+component_visor & kv()
 {
-    static owl::component_visor kv;
+    static component_visor kv;
     return kv;
 }
 
@@ -67,23 +67,23 @@ static void hup_handler(int signal)
         
         std::ifstream cf(config_file);
         Json::Value config;
-        if (!util::parse_json(cf, config))
+        if (!parse_json(cf, config))
         {
             LOG_ERROR("the config file " << config_file << " is not valid json");
             return;
         }
         
-        auto httpd =
-            kv().get_component<httpd::httpd>(httpd::httpd::NAME);
+        auto ws =
+            kv().get_component<httpd>(httpd::NAME);
         
-        if (!httpd)
+        if (!ws)
         {
             return;
         }
         
         LOG_INFO("resetting httpd ports: " << config);
         
-        httpd->clear_listeners();
+        ws->clear_listeners();
         
         LOG_INFO("post clear listeners");
         
@@ -91,14 +91,14 @@ static void hup_handler(int signal)
         {
             int port = config["http.port"].asInt();
             LOG_INFO("adding http port: " << port);
-            httpd->add_listener(httpd::httpd::PROTOCOL::HTTP, port);
+            ws->add_listener(httpd::PROTOCOL::HTTP, port);
         }
         
         if (config.isMember("https.port") && config["https.port"].isInt());
         {
             int port = config["https.port"].asInt();
             LOG_INFO("adding https port: " << port);
-            httpd->add_listener(httpd::httpd::PROTOCOL::HTTPS, port);
+            ws->add_listener(httpd::PROTOCOL::HTTPS, port);
         }
         
         kv().hup();
@@ -124,7 +124,7 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    util::log::set_log_level(ss.log_level);
+    log::set_log_level(ss.log_level);
 
     LOG_INFO("www application version " << WWW_VERSION);
     
@@ -139,7 +139,7 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    if (!util::file_is_file(ss.config_file))
+    if (!file_is_file(ss.config_file))
     {
         std::string cf = ss.config_file;
         LOG_FATAL("the config file " << cf << " was not found");
@@ -148,7 +148,7 @@ int main(int argc, char** argv)
 
     std::ifstream cf(ss.config_file, std::ifstream::binary);
     Json::Value config;
-    if (!util::parse_json(cf, config))
+    if (!parse_json(cf, config))
     {
         std::string cf = ss.config_file;
         LOG_FATAL("the config file " << cf << " is not valid json");
@@ -180,10 +180,10 @@ int main(int argc, char** argv)
         key_file = config["key_file"].asString();
     }
 
-    util::ssl_connection::init(cert_file.c_str(), key_file.c_str());
+    ssl_connection::init(cert_file.c_str(), key_file.c_str());
 
     // build compponents
-    auto k1 = new httpd::httpd();
+    auto k1 = new httpd();
     assert(k1);
     auto k2 = new file_server();
     assert(k2);
@@ -192,17 +192,17 @@ int main(int argc, char** argv)
     kv().add(k1);
     kv().add(k2);
     
-    authdb::auth_db * auth_db = nullptr;
+    auth_db * adb = nullptr;
     
     if (config["webpass"].isString() && config["realm"].isString())
     {
-        auth_db = new authdb::auth_db(config["realm"].asString(),
-                                      config["webpass"].asString());
-        if (!auth_db->initialize())
+        adb = new auth_db(config["realm"].asString(),
+                              config["webpass"].asString());
+        if (!adb->initialize())
         {
             FATAL("failed to initialize auth db");
         }
-        k1->auth_db(auth_db);
+        k1->auth_db(adb);
     }
 
     k2->require_authorization(false);
@@ -211,13 +211,13 @@ int main(int argc, char** argv)
     if (config.isMember("http.port") && config["http.port"].isInt())
     {
         int port = config["http.port"].asInt();
-        k1->add_listener(httpd::httpd::PROTOCOL::HTTP, port);
+        k1->add_listener(httpd::PROTOCOL::HTTP, port);
     }
     
     if (config.isMember("https.port") && config["https.port"].isInt());
     {
         int port = config["https.port"].asInt();
-        k1->add_listener(httpd::httpd::PROTOCOL::HTTPS, port);
+        k1->add_listener(httpd::PROTOCOL::HTTPS, port);
     }
 
     k1 = nullptr;
@@ -245,11 +245,11 @@ int main(int argc, char** argv)
     
     kv().clear();
     
-    util::ssl_connection::destroy();
+    ssl_connection::destroy();
 
-    if (auth_db)
+    if (adb)
     {
-        delete(auth_db);
+        delete(adb);
     }
 
     LOG_INFO("exiting");
