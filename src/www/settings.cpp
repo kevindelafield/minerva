@@ -3,7 +3,7 @@
 #include <iostream>
 #include "settings.h"
 
-namespace www
+namespace minerva
 {
 
     bool settings::parse_command_line(int argc, char** argv)
@@ -28,7 +28,7 @@ namespace www
                     return false;
                 }
                 std::string log_str(argv[i]);
-                log_level = (util::log::LOG_LEVEL)std::stoi(log_str);
+                log_level = (log::LOG_LEVEL)std::stoi(log_str);
             }
             else if (option == "-v")
             {

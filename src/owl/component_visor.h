@@ -11,7 +11,7 @@
 #include <util/scheduler.h>
 #include "component.h"
 
-namespace owl
+namespace minerva
 {
 
     class component_visor
@@ -23,8 +23,8 @@ namespace owl
         std::vector<std::function<void()>> _thread_functions;
         std::map<std::string, std::unique_ptr<component>> components;
         std::set<std::thread*> threads;
-        std::set<util::thread_pool *> thread_pools;
-        util::scheduler sched;
+        std::set<minerva::thread_pool *> thread_pools;
+        minerva::scheduler sched;
         bool running;
         std::mutex lock;
         std::condition_variable cond;
@@ -44,23 +44,23 @@ namespace owl
 
         void add(component * cmp);
 
-        util::scheduler::job_handle schedule_job(const util::scheduler::job_element & job, int milliseconds)
+        minerva::scheduler::job_handle schedule_job(const minerva::scheduler::job_element & job, int milliseconds)
         {
             return sched.schedule_job(job, std::chrono::milliseconds(milliseconds));
         }
 
-        bool cancel_job(const util::scheduler::job_handle & handle)
+        bool cancel_job(const minerva::scheduler::job_handle & handle)
         {
             return sched.cancel_job(handle);
         }
 
         void add_thread(const std::function<void()> & routine);
 
-        util::thread_pool * add_thread_pool(int count)
+        minerva::thread_pool * add_thread_pool(int count)
         {
             std::unique_lock<std::mutex> lk(lock);
             assert(!running);
-            auto tp = new util::thread_pool(count);
+            auto tp = new minerva::thread_pool(count);
             assert(tp);
             thread_pools.insert(tp);
             return tp;

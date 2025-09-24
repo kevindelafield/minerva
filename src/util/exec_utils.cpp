@@ -20,7 +20,7 @@
 #include "exec_utils.h"
 #include "string_utils.h"
 
-namespace util
+namespace minerva
 {
     pid_t get_pid_by_name(const std::string & name)
     {

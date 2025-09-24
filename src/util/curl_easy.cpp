@@ -4,7 +4,7 @@
 #include "curl_easy.h"
 #include "log.h"
 
-namespace util
+namespace minerva
 {
     bool curl_easy::isGlobalInitialized = false;
 

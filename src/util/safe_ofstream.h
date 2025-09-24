@@ -6,7 +6,7 @@
 #include <sstream>
 #include "guid.h"
 
-namespace util
+namespace minerva
 {
     class safe_ofstream : public std::ofstream
     {
@@ -18,7 +18,7 @@ namespace util
             std::stringstream ss;
             ss << filename;
             ss << ".";
-            ss << new_guid();
+            ss << minerva::new_guid();
 
             m_fakepath = ss.str();
 

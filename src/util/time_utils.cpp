@@ -3,7 +3,7 @@
 #include <ctime>
 #include "time_utils.h"
 
-namespace util
+namespace minerva
 {
 
     std::string ctime(const std::time_t & time)    

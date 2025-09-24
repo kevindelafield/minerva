@@ -5,7 +5,7 @@
 #include <mutex>
 #include "http_context.h"
 
-namespace httpd
+namespace minerva
 {
     static std::mutex _lock;
 

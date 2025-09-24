@@ -8,7 +8,7 @@
 #include "log.h"
 #include "file_utils.h"
 
-namespace util
+namespace minerva
 {
 
     bool file_is_empty(const std::string & path)
@@ -112,7 +112,6 @@ namespace util
                     LOG_ERROR_ERRNO("failed to remove file system entry: " <<
                                     fp, errno);
                     if (closedir(d))
-
                     {
                         LOG_ERROR_ERRNO("error closing directory" << 
                                         path, errno);
@@ -154,7 +153,7 @@ namespace util
         {
             std::string name(dir->d_name);
 
-            if (!end_pattern.empty() && !ends_with(name, end_pattern))
+            if (!end_pattern.empty() && !minerva::ends_with(name, end_pattern))
             {
                 continue;
             }

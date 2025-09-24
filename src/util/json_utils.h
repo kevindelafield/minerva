@@ -3,9 +3,7 @@
 #include <istream>
 #include <jsoncpp/json/json.h>
 
-namespace util
+namespace minerva
 {
-
     bool parse_json(std::istream & str, Json::Value & value);
-
 }

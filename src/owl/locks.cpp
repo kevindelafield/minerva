@@ -1,6 +1,6 @@
 #include "locks.h"
 
-namespace owl
+namespace minerva
 {
     std::shared_mutex shared_lock;
     

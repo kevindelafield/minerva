@@ -3,9 +3,10 @@
 #include <atomic>
 #include <mutex>
 #include <cassert>
+#include <string>
 #include "file_lock.h"
 
-namespace util
+namespace minerva
 {
     class shared_file_lock : public file_lock
     {

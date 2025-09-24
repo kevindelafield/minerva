@@ -13,7 +13,7 @@
 #include "name_resolver.h"
 #include "log.h"
 
-namespace util
+namespace minerva
 {
 
     int name_resolver::resolve(const char* server, const char* port,

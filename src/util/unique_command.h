@@ -2,7 +2,7 @@
 
 #include <functional>
 
-namespace util
+namespace minerva
 {
     class unique_command
     {

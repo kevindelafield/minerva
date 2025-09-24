@@ -10,7 +10,7 @@
 #include <tuple>
 #include "file_utils.h"
 
-namespace util
+namespace minerva
 {
 
 class log
@@ -71,67 +71,67 @@ private:
 
 #define LOG(level, level_string, filename, line, args)                  \
     {                                                                   \
-        if (util::log::get_log_level() <= level)                        \
+        if (minerva::log::get_log_level() <= level)                        \
         {                                                               \
             std::stringstream ssx;                                      \
             ssx << args;                                                \
             std::string msg = ssx.str();                                \
-            util::log::log_message(msg, level_string, __func__,      \
+            minerva::log::log_message(msg, level_string, __func__,      \
                                       filename, line);                  \
         }                                                               \
     }
 
 #define LOG_ERRNO(level, level_string, filename, line, args, err)       \
     {                                                                   \
-        if (util::log::get_log_level() <= level)                        \
+        if (minerva::log::get_log_level() <= level)                        \
         {                                                               \
             std::stringstream ssx;                                      \
             ssx << args;                                                \
             std::string msg = ssx.str();                                \
-            util::log::log_errno_message(msg, level_string, __func__,   \
+            minerva::log::log_errno_message(msg, level_string, __func__,   \
                                             filename, line, err);       \
         }                                                               \
     }
 
 #define LOG_TRACE(args)                                                 \
-    LOG(util::log::TRACE, util::log::TRACE_STRING, __SHORT_FILE__, __LINE__, args);
+    LOG(minerva::log::TRACE, minerva::log::TRACE_STRING, __SHORT_FILE__, __LINE__, args);
 
 #define LOG_TRACE_ERRNO(args, err)                                      \
-    LOG_ERRNO(util::log::TRACE, util::log::TRACE_STRING, __SHORT_FILE__, __LINE__, args, err);
+    LOG_ERRNO(minerva::log::TRACE, minerva::log::TRACE_STRING, __SHORT_FILE__, __LINE__, args, err);
 
 #define LOG_DEBUG(args)                                                 \
-    LOG(util::log::DEBUG, util::log::DEBUG_STRING, __SHORT_FILE__, __LINE__, args);
+    LOG(minerva::log::DEBUG, minerva::log::DEBUG_STRING, __SHORT_FILE__, __LINE__, args);
 
 #define LOG_DEBUG_ERRNO(args, err)                                      \
-    LOG_ERRNO(util::log::DEBUG, util::log::DEBUG_STRING, __SHORT_FILE__, __LINE__, args, err);
+    LOG_ERRNO(minerva::log::DEBUG, minerva::log::DEBUG_STRING, __SHORT_FILE__, __LINE__, args, err);
 
 #define LOG_INFO(args)                                                  \
-    LOG(util::log::INFO, util::log::INFO_STRING, __SHORT_FILE__, __LINE__, args);
+    LOG(minerva::log::INFO, minerva::log::INFO_STRING, __SHORT_FILE__, __LINE__, args);
 
 #define LOG_INFO_ERRNO(args, err)                                       \
-    LOG_ERRNO(util::log::INFO, util::log::INFO_STRING, __SHORT_FILE__, __LINE__, args, err);
+    LOG_ERRNO(minerva::log::INFO, minerva::log::INFO_STRING, __SHORT_FILE__, __LINE__, args, err);
 
 #define LOG_WARN(args)                                                  \
-    LOG(util::log::WARN, util::log::WARN_STRING, __SHORT_FILE__, __LINE__, args);
+    LOG(minerva::log::WARN, minerva::log::WARN_STRING, __SHORT_FILE__, __LINE__, args);
 
 #define LOG_WARN_ERRNO(args, err)                                       \
-    LOG_ERRNO(util::log::WARN, util::log::WARN_STRING, __SHORT_FILE__, __LINE__, args, err);
+    LOG_ERRNO(minerva::log::WARN, minerva::log::WARN_STRING, __SHORT_FILE__, __LINE__, args, err);
 
 #define LOG_ERROR(args)                                                 \
-    LOG(util::log::ERROR, util::log::ERROR_STRING, __SHORT_FILE__, __LINE__, args);
+    LOG(minerva::log::ERROR, minerva::log::ERROR_STRING, __SHORT_FILE__, __LINE__, args);
 
 #define LOG_ERROR_ERRNO(args, err)                                      \
-    LOG_ERRNO(util::log::ERROR, util::log::ERROR_STRING, __SHORT_FILE__, __LINE__, args, err);
+    LOG_ERRNO(minerva::log::ERROR, minerva::log::ERROR_STRING, __SHORT_FILE__, __LINE__, args, err);
 
 #define LOG_FATAL(args)                                                 \
-    LOG(util::log::FATAL, util::log::FATAL_STRING, __SHORT_FILE__, __LINE__, args);
+    LOG(minerva::log::FATAL, minerva::log::FATAL_STRING, __SHORT_FILE__, __LINE__, args);
 
 #define LOG_FATAL_ERRNO(args, err)                                      \
-    LOG_ERRNO(util::log::FATAL, util::log::FATAL_STRING, __SHORT_FILE__, __LINE__, args, err);
+    LOG_ERRNO(minerva::log::FATAL, minerva::log::FATAL_STRING, __SHORT_FILE__, __LINE__, args, err);
 
 #define FATAL(args)                                                     \
     {                                                                   \
-        LOG(util::log::FATAL, util::log::FATAL_STRING,                  \
+        LOG(minerva::log::FATAL, minerva::log::FATAL_STRING,                  \
             __SHORT_FILE__, __LINE__, args);                                  \
         std::cout.flush();                                              \
         abort();                                                        \
@@ -139,7 +139,7 @@ private:
 
 #define FATAL_ERRNO(args, err)                                          \
     {                                                                   \
-        LOG_ERRNO(util::log::FATAL, util::log::FATAL_STRING,            \
+        LOG_ERRNO(minerva::log::FATAL, minerva::log::FATAL_STRING,            \
                   __SHORT_FILE__, __LINE__, args, err);                       \
         std::cout.flush();                                              \
         abort();                                                        \

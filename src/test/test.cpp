@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     args.push_back("-xzf");
     args.push_back("-");
 
-    util::execl proc("/bin/tar", args);
+    minerva::execl proc("/bin/tar", args);
 
     int pid;
 
@@ -46,7 +46,7 @@ int main(int argc, char** argv)
     LOG_INFO("running sleep");
 
     int pid2;
-    int status = util::execbg("/bin/sleep 1000", pid2);
+    int status = minerva::execbg("/bin/sleep 1000", pid2);
     if (status)
     {
         LOG_ERROR("failed to run sleep");

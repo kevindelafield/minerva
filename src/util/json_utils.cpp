@@ -1,7 +1,7 @@
 #include "json_utils.h"
 #include "log.h"
 
-namespace util
+namespace minerva
 {
 
     bool parse_json(std::istream & str, Json::Value & value)

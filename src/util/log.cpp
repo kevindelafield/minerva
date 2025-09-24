@@ -5,7 +5,7 @@
 #include "log.h"
 #include "time_utils.h"
 
-namespace util
+namespace minerva
 {
 
 #define STRERROR_BUF_SIZE 64
@@ -56,7 +56,7 @@ namespace util
     std::string log::format_current_time()
     {
         auto st = log::get_systime();
-        std::tm tm = util::localtime(std::get<0>(st));
+        std::tm tm = minerva::localtime(std::get<0>(st));
         auto put = std::put_time(&tm, log::time_format_string);
         std::stringstream ss;
         ss << put << " (" << std::get<1>(st) << "ms)";

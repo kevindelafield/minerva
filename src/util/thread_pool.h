@@ -7,7 +7,7 @@
 #include <queue>
 #include <functional>
 
-namespace util
+namespace minerva
 {
 
     class thread_pool

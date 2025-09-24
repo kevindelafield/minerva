@@ -6,8 +6,12 @@
 #include <sys/types.h>
 #include <string>
 #include "log.h"
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <atomic>
 
-namespace util
+namespace minerva
 {
     class file_lock
     {

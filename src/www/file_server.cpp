@@ -15,12 +15,12 @@
 #include <httpd/httpd.h>
 #include "file_server.h"
 
-namespace www
+namespace minerva
 {
 
     void file_server::initialize()
     {
-        auto svr = get_component<httpd::httpd>(httpd::httpd::NAME);
+        auto svr = get_component<httpd>(NAME);
         if (svr)
         {
             svr->register_default_controller(this);
@@ -40,13 +40,13 @@ namespace www
         m_root_dir = conf["www_root_dir"].asString();
         m_default_file = conf["www_default_file"].asString();
 
-        if (!util::file_is_directory(m_root_dir))
+        if (!file_is_directory(m_root_dir))
         {
             FATAL("www root directory does not exist: " << m_root_dir);
         }
 
         std::string def_file = m_root_dir + "/" + m_default_file;
-        if (!util::file_is_file(def_file))
+        if (!file_is_file(def_file))
         {
             FATAL("www default file does not exist: " << def_file);
         }
@@ -75,7 +75,7 @@ namespace www
         }
 
         // URL decode the path first to handle encoded directory traversal attempts
-        std::string decoded_path = httpd::http_request::url_decode(requested_path);
+        std::string decoded_path = http_request::url_decode(requested_path);
         
         // Reject paths containing dangerous patterns
         if (decoded_path.find("..") != std::string::npos ||
@@ -195,7 +195,7 @@ namespace www
         return final_path;
     }
 
-    void file_server::handle_request(httpd::http_context & ctx, const std::string & op)
+    void file_server::handle_request(http_context & ctx, const std::string & op)
     {
         ctx.response().add_header("Pragma", "no-cache");
         ctx.response().add_header("Cache-Control", "no-cache");
@@ -211,7 +211,7 @@ namespace www
             return;
         }
 
-        if (!util::file_is_file(filename))
+        if (!file_is_file(filename))
         {
             LOG_DEBUG("didn't find file: " << filename);
             ctx.response().status_code_not_found();

@@ -4,7 +4,7 @@
 #include "scheduler.h"
 #include "log.h"
 
-namespace util
+namespace minerva
 {
 
     scheduler::scheduler(int threads) : should_shutdown(false), running(false), t(NULL), tp(threads)

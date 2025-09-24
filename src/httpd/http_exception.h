@@ -2,7 +2,7 @@
 
 #include <exception>
 
-namespace httpd
+namespace minerva
 {
 
     class http_exception : public std::exception

@@ -8,7 +8,7 @@
 #include <util/string_utils.h>
 #include "http_content_type.h"
 
-namespace httpd
+namespace minerva
 {
 
     class http_context;

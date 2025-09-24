@@ -6,7 +6,7 @@
 #include <thread>
 #include <sstream>
 
-namespace util
+namespace minerva
 {
     pid_t get_pid_by_name(const std::string & name);
 

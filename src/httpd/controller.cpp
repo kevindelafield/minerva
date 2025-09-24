@@ -5,7 +5,7 @@
 #include "controller.h"
 #include "http_context.h"
 
-namespace httpd
+namespace minerva
 {
 
     void controller::handle_request(http_context & ctx,
@@ -95,35 +95,35 @@ namespace httpd
         if (index != std::string::npos)
         {
             std::string ext = filename.substr(index+1);
-            if (util::ci_equals(ext, "jpg") || util::ci_equals(ext, "jpeg"))
+            if (minerva::ci_equals(ext, "jpg") || minerva::ci_equals(ext, "jpeg"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_IMAGE_JPEG;
             }
-            else if (util::ci_equals(ext, "html") || util::ci_equals(ext, "html"))
+            else if (minerva::ci_equals(ext, "html") || minerva::ci_equals(ext, "html"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_HTML;
             }
-            else if (util::ci_equals(ext, "txt") || util::ci_equals(ext, "log"))
+            else if (minerva::ci_equals(ext, "txt") || minerva::ci_equals(ext, "log"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_PLAIN;
             }
-            else if (util::ci_equals(ext, "xml"))
+            else if (minerva::ci_equals(ext, "xml"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_APPLICATION_XML;
             }
-            else if (util::ci_equals(ext, "json"))
+            else if (minerva::ci_equals(ext, "json"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_APPLICATION_JSON;
             }
-            else if (util::ci_equals(ext, "js"))
+            else if (minerva::ci_equals(ext, "js"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_JAVASCRIPT;
             }
-            else if (util::ci_equals(ext, "png"))
+            else if (minerva::ci_equals(ext, "png"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_IMAGE_PNG;
             }
-            else if (util::ci_equals(ext, "css"))
+            else if (minerva::ci_equals(ext, "css"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_CSS;
             }

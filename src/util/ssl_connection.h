@@ -5,7 +5,7 @@
 #include <openssl/err.h>
 #include "connection.h"
 
-namespace util
+namespace minerva
 {
     class ssl_connection : public connection
     {

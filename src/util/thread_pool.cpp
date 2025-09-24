@@ -3,7 +3,7 @@
 #include <signal.h>
 #include "thread_pool.h"
 
-namespace util
+namespace minerva
 {
 
     thread_pool::thread_pool(int count) :

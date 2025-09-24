@@ -2,8 +2,10 @@
 
 #include <queue>
 #include <chrono>
+#include <mutex>
+#include <condition_variable>
 
-namespace util
+namespace minerva
 {
     class throttle
     {

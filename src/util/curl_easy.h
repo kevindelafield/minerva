@@ -9,7 +9,7 @@
 #include <mutex>
 #include <curl/curl.h>
 
-namespace util
+namespace minerva
 {
     class curl_easy
     {

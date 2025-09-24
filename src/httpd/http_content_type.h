@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace httpd
+namespace minerva
 {
 
     class http_content_type
