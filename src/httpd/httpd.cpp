@@ -28,6 +28,36 @@ namespace httpd
     {
     }
 
+    std::shared_ptr<util::connection> httpd::create_connection(int socket, PROTOCOL protocol)
+    {
+        switch (protocol) {
+            case PROTOCOL::HTTP:
+                return std::make_shared<util::connection>(socket);
+            case PROTOCOL::HTTPS:
+                return std::shared_ptr<util::connection>(
+                    static_cast<util::connection*>(new util::ssl_connection(socket))
+                );
+            default:
+                LOG_ERROR("Invalid HTTP protocol: " << static_cast<int>(protocol));
+                return nullptr;
+        }
+    }
+
+    std::shared_ptr<util::connection> httpd::create_listener_connection(PROTOCOL protocol)
+    {
+        switch (protocol) {
+            case PROTOCOL::HTTP:
+                return std::make_shared<util::connection>(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+            case PROTOCOL::HTTPS:
+                return std::shared_ptr<util::connection>(
+                    static_cast<util::connection*>(new util::ssl_connection(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0))
+                );
+            default:
+                LOG_ERROR("Invalid HTTP protocol: " << static_cast<int>(protocol));
+                return nullptr;
+        }
+    }
+
     void httpd::register_controller(const std::string & path, 
                                     controller * controller)
     {
@@ -77,26 +107,16 @@ namespace httpd
         {
             listener.second.conn->shutdown_write();
             listener.second.conn->shutdown_read();
-            delete listener.second.conn;
+            // Smart pointer automatically cleans up
         }
         m_listener_sockets.clear();
 
         for (auto & listener : m_listeners)
         {
-            util::connection * conn;
-            if (listener.protocol == httpd::PROTOCOL::HTTP)
+            auto conn = create_listener_connection(listener.protocol);
+            if (!conn)
             {
-                conn =
-                    new util::connection(AF_INET6,
-                                         SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
-            }
-            else if (listener.protocol == httpd::PROTOCOL::HTTPS)
-            {
-                conn = static_cast<util::connection *>(new util::ssl_connection(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
-            }
-            else
-            {
-                LOG_ERROR("invalid http protocol: " << listener.protocol);
+                LOG_ERROR("Failed to create listener connection");
                 continue;
             }
 
@@ -155,7 +175,7 @@ namespace httpd
         {
             listener.second.conn->shutdown_write();
             listener.second.conn->shutdown_read();
-            delete listener.second.conn;
+            // Smart pointer automatically cleans up
         }
         m_listener_sockets.clear();
 
@@ -168,7 +188,7 @@ namespace httpd
             conn->shutdown();
             conn->shutdown_write();
             conn->shutdown_read();
-            delete conn;
+            // Smart pointer automatically cleans up
         }
         m_socket_map.clear();
 
@@ -198,17 +218,17 @@ namespace httpd
         }
     }
 
-    void httpd::shutdown_write_async(util::connection * conn)
+    void httpd::shutdown_write_async(std::shared_ptr<util::connection> conn)
     {
         schedule_job([this, conn]()
                      {
                          shutdown(conn);
                          conn->shutdown_write();
-                         delete conn;
+                         // Smart pointer automatically manages cleanup
                      }, 0);
     }
 
-    bool httpd::shutdown(util::connection * conn)
+    bool httpd::shutdown(std::shared_ptr<util::connection> conn)
     {
         util::timer timer(true);
 
@@ -271,9 +291,9 @@ namespace httpd
     {
         while (!should_shutdown())
         {
-            std::map<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> map;
+            std::map<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> map;
             std::vector<util::connection::shared_poll_fd> fds;
-            std::vector<util::connection *> to_close;
+            std::vector<std::shared_ptr<util::connection>> to_close;
             
             // wait for sockets or a shutdown
             {
@@ -318,7 +338,7 @@ namespace httpd
             }
 
             std::for_each(map.begin(), map.end(),
-                          [&fds](std::pair<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> item)
+                          [&fds](std::pair<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> item)
                           {
                               fds.push_back(util::connection::shared_poll_fd(item.first,
                                                                        true,
@@ -397,14 +417,14 @@ namespace httpd
                                  it->shutdown();
                                  it->shutdown_write();
                                  it->shutdown_read();
-                                 delete it;
+                                 // Smart pointer automatically cleans up
                              }
                          }, 0);
             // shutdown connections
         }
     }
     
-    void httpd::put_back_connection(util::connection * conn, 
+    void httpd::put_back_connection(std::shared_ptr<util::connection> conn,
                                     const sockaddr_in & addr, 
                                     socklen_t addr_len)
     {
@@ -505,9 +525,7 @@ namespace httpd
                 LOG_DEBUG("Accept Successful: " << http);
                 
                 // queue up request
-                util::connection * conn = http ?
-                    new util::connection(s) :
-                    static_cast<util::connection *>(new util::ssl_connection(s));
+                auto conn = create_connection(s, http ? PROTOCOL::HTTP : PROTOCOL::HTTPS);
                 assert(conn);
                 
                 schedule_job([this, conn, addr, addr_len]()
@@ -515,7 +533,7 @@ namespace httpd
                                  if (!accept(conn))
                                  {
                                      LOG_DEBUG("failed to establish tls session");
-                                     delete conn;
+                                     // Smart pointer automatically cleans up
                                  }
                                  else
                                  {
@@ -531,7 +549,7 @@ namespace httpd
         
     }
 
-    bool httpd::accept(util::connection * conn)
+    bool httpd::accept(std::shared_ptr<util::connection> conn)
     {
         util::timer timer(true);
         bool accepted = false;
@@ -645,7 +663,7 @@ namespace httpd
 
     constexpr static size_t BUFFER_SIZE = 100*1024;
 
-    void httpd::handle_request(util::connection * conn,
+    void httpd::handle_request(std::shared_ptr<util::connection> conn,
                                const struct sockaddr_in & addr, 
                                socklen_t addr_len)
     {
@@ -1096,7 +1114,7 @@ namespace httpd
             LOG_WARN("aborting HTTP connection");
             conn->shutdown_write();
             conn->shutdown_read();
-            delete conn;
+            // Smart pointer automatically cleans up
         }
 
         m_active_count--;

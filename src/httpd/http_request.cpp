@@ -21,6 +21,13 @@ namespace httpd
     static const char* expectKey = "expect";
     static const char* continue100 = "100-continue";
 
+    // Request size validation limits to prevent DoS attacks
+    static const size_t MAX_HEADER_SIZE = 8192;          // 8KB per header line
+    static const size_t MAX_HEADERS_COUNT = 100;         // Maximum number of headers
+    static const size_t MAX_URI_LENGTH = 2048;           // Maximum URI length
+    static const size_t MAX_REQUEST_LINE_SIZE = 4096;    // Maximum request line size
+    static const size_t MAX_TOTAL_HEADERS_SIZE = 64*1024; // Maximum total header size (64KB)
+
     static char tmpBuf[1];
 
     http_request::http_request(http_context * ctx) :
@@ -52,12 +59,26 @@ namespace httpd
     {
         m_offset = offset;
 
+        // Validate total header buffer size
+        if (offset > MAX_TOTAL_HEADERS_SIZE)
+        {
+            LOG_WARN("Header buffer too large: " << offset << " bytes");
+            return false;
+        }
+
         std::string header(buf.data(), offset);
         std::stringstream ss(header);
         std::string line;
 
         if (!std::getline(ss, line))
         {
+            return false;
+        }
+
+        // Validate request line size
+        if (line.size() > MAX_REQUEST_LINE_SIZE)
+        {
+            LOG_WARN("Request line too large: " << line.size() << " bytes");
             return false;
         }
     
@@ -105,6 +126,13 @@ namespace httpd
 
         LOG_DEBUG("path: " << path);
 
+        // Validate URI length to prevent DoS attacks
+        if (path.length() > MAX_URI_LENGTH)
+        {
+            LOG_WARN("URI too long: " << path.length() << " characters");
+            return false;
+        }
+
         // parse method
         if (method == "GET")
         {
@@ -147,33 +175,37 @@ namespace httpd
             // parse query params
             if (index < path.size() - 1)
             {
-                std::string qs = path.substr(index + 1, path.size() - index - 1);
+                std::string qs = path.substr(index + 1);
                 m_query_string = qs;
-                std::stringstream query_stream(qs);
-                std::string item;
-                while (std::getline(query_stream, item, '&'))
+                
+                // More efficient query parsing without stringstream
+                size_t start = 0;
+                while (start < qs.size())
                 {
-                    std::string key;
-                    std::string value;
-                    index = item.find('=');
-                    if (index == std::string::npos)
+                    size_t amp_pos = qs.find('&', start);
+                    if (amp_pos == std::string::npos)
+                        amp_pos = qs.size();
+                    
+                    if (amp_pos > start) // Non-empty parameter
                     {
-                        key = url_decode(item);
-                        value = "";
+                        size_t eq_pos = qs.find('=', start);
+                        std::string key, value;
+                        
+                        if (eq_pos == std::string::npos || eq_pos >= amp_pos)
+                        {
+                            // No '=' found or '=' is beyond this parameter
+                            key = url_decode(qs.substr(start, amp_pos - start));
+                            value = "";
+                        }
+                        else
+                        {
+                            key = url_decode(qs.substr(start, eq_pos - start));
+                            value = url_decode(qs.substr(eq_pos + 1, amp_pos - eq_pos - 1));
+                        }
+                        m_query_params[key] = value;
                     }
-                    else if (index >= item.size() - 1)
-                    {
-                        key = url_decode(item);
-                        value = "";
-                    }
-                    else
-                    {
-                        key = url_decode(item.substr(0, index));
-                        value =
-                            url_decode(item.substr(index + 1,
-                                                   item.size() - index - 1));
-                    }
-                    m_query_params[key] = value;
+                    
+                    start = amp_pos + 1;
                 }
             }
         }
@@ -187,6 +219,8 @@ namespace httpd
         std::string content_type(contentType);
 
         bool has_content_length = false;
+        size_t total_headers_size = 0;
+        size_t header_count = 0;
 
         // read headers line by line
         while (std::getline(ss, line))
@@ -196,17 +230,55 @@ namespace httpd
             {
                 break;
             }
-            // search header
-            regex = headerRegex;
-            std::regex_search(line, match, regex);
-            if (match.size() != 3)
+
+            // Validate header size
+            if (line.size() > MAX_HEADER_SIZE)
+            {
+                LOG_WARN("Header line too large: " << line.size() << " bytes");
+                return false;
+            }
+
+            // Validate header count
+            header_count++;
+            if (header_count > MAX_HEADERS_COUNT)
+            {
+                LOG_WARN("Too many headers: " << header_count);
+                return false;
+            }
+
+            // Validate total headers size
+            total_headers_size += line.size();
+            if (total_headers_size > MAX_TOTAL_HEADERS_SIZE)
+            {
+                LOG_WARN("Total headers size too large: " << total_headers_size << " bytes");
+                return false;
+            }
+
+            // Optimized header parsing without regex
+            size_t colon_pos = line.find(':');
+            if (colon_pos == std::string::npos || colon_pos == 0)
             {
                 LOG_WARN("Invalid http header: " << line.c_str());
                 return false;
             }
-            // extract header
-            std::string key = match[1];
-            std::string value = match[2];
+            
+            // Extract key (before colon, trim right)
+            std::string key = line.substr(0, colon_pos);
+            util::rtrim(key);
+            
+            // Extract value (after colon, skip spaces, remove \r)
+            std::string value;
+            size_t value_start = colon_pos + 1;
+            while (value_start < line.size() && std::isspace(line[value_start]))
+                ++value_start;
+            
+            if (value_start < line.size())
+            {
+                value = line.substr(value_start);
+                // Remove trailing \r if present
+                if (!value.empty() && value.back() == '\r')
+                    value.pop_back();
+            }
 
             LOG_DEBUG("header: " << key << "=" << value);
 
@@ -286,6 +358,13 @@ namespace httpd
         if (has_content_length && m_chunked)
         {
             LOG_WARN("received content length and chunked transfer encoding header");
+            return false;
+        }
+
+        // HTTP/1.1 requires Host header (RFC 7230 Section 5.4)
+        if (m_http11 && m_headers.find("host") == m_headers.end())
+        {
+            LOG_WARN("HTTP/1.1 request missing required Host header");
             return false;
         }
 
@@ -372,19 +451,16 @@ namespace httpd
                     m_overflow.pop_front();
                     m_overflow.pop_front();
 
-                    if (hex.size() % 2 != 0)
-                    {
-                        LOG_WARN("invalid chunk header: " << hex);
-                        throw http_exception("invalid chunk header");
-                    }
-
-                    std::stringstream ss;
+                    // Validate hex characters and parse chunk size
                     try
                     {
-                        ss << std::hex << hex;
-                        ss >> m_chunk_size;
+                        if (hex.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
+                        {
+                            throw std::invalid_argument("Invalid hex character");
+                        }
+                        m_chunk_size = std::stoul(hex, nullptr, 16);
                     }
-                    catch (std::exception & exc)
+                    catch (const std::exception & exc)
                     {
                         LOG_WARN("invalid chunk header: " << hex);
                         throw http_exception("invalid chunk header");
@@ -523,7 +599,7 @@ namespace httpd
     {
         if (!chunked())
         {
-            throw new http_exception("chunk protocol violation");
+            throw http_exception("chunk protocol violation");
         }
         m_partial_read = true;
 
@@ -560,19 +636,21 @@ namespace httpd
                 }
                 if (found_nl)
                 {
+                    // Build hex string more efficiently by reserving space
                     std::string hex;
-                    for (int i=0; i<nl_index; i++)
+                    hex.reserve(nl_index);
+                    for (int i = 0; i < nl_index; i++)
                     {
                         hex += m_overflow.front();
                         m_overflow.pop_front();
                     }
                     m_overflow.pop_front();
                     m_overflow.pop_front();
-                    std::stringstream ss;
+                    
+                    // Use std::stoul directly instead of stringstream
                     try
                     {
-                        ss << std::hex << hex;
-                        ss >> m_chunk_size;
+                        m_chunk_size = std::stoul(hex, nullptr, 16);
                     }
                     catch (std::exception & exc)
                     {
@@ -824,19 +902,21 @@ namespace httpd
                 }
                 if (found_nl)
                 {
+                    // Build hex string more efficiently by reserving space
                     std::string hex;
-                    for (int i=0; i<nl_index; i++)
+                    hex.reserve(nl_index);
+                    for (int i = 0; i < nl_index; i++)
                     {
                         hex += m_overflow.front();
                         m_overflow.pop_front();
                     }
                     m_overflow.pop_front();
                     m_overflow.pop_front();
-                    std::stringstream ss;
+                    
+                    // Use std::stoul directly instead of stringstream
                     try
                     {
-                        ss << std::hex << hex;
-                        ss >> m_chunk_size;
+                        m_chunk_size = std::stoul(hex, nullptr, 16);
                     }
                     catch (std::exception & exc)
                     {
@@ -1050,19 +1130,21 @@ namespace httpd
                     }
                     if (found_nl)
                     {
+                        // Build hex string more efficiently by reserving space
                         std::string hex;
-                        for (int i=0; i<nl_index; i++)
+                        hex.reserve(nl_index);
+                        for (int i = 0; i < nl_index; i++)
                         {
                             hex += m_overflow.front();
                             m_overflow.pop_front();
                         }
                         m_overflow.pop_front();
                         m_overflow.pop_front();
-                        std::stringstream ss;
+                        
+                        // Use std::stoul directly instead of stringstream
                         try
                         {
-                            ss << std::hex << hex;
-                            ss >> m_chunk_size;
+                            m_chunk_size = std::stoul(hex, nullptr, 16);
                         }
                         catch (std::exception & exc)
                         {

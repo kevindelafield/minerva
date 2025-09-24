@@ -145,4 +145,45 @@ namespace util
         rtrim(str, "\r\n");
         return str;
     }
+
+    // Efficient string splitting without multiple allocations
+    inline void split(const std::string& str, char delimiter, std::vector<std::string>& result)
+    {
+        result.clear();
+        size_t start = 0;
+        size_t pos = 0;
+        
+        while ((pos = str.find(delimiter, start)) != std::string::npos)
+        {
+            if (pos > start) // Non-empty substring
+                result.emplace_back(str.substr(start, pos - start));
+            start = pos + 1;
+        }
+        
+        // Add the last part if non-empty
+        if (start < str.size())
+            result.emplace_back(str.substr(start));
+    }
+
+    // Fast hex string to unsigned conversion - optimized for chunk parsing
+    inline bool try_parse_hex(const std::string& hex_str, size_t& result)
+    {
+        if (hex_str.empty())
+            return false;
+            
+        result = 0;
+        for (char c : hex_str)
+        {
+            result <<= 4;
+            if (c >= '0' && c <= '9')
+                result += c - '0';
+            else if (c >= 'A' && c <= 'F')
+                result += c - 'A' + 10;
+            else if (c >= 'a' && c <= 'f')
+                result += c - 'a' + 10;
+            else
+                return false; // Invalid hex character
+        }
+        return true;
+    }
 }

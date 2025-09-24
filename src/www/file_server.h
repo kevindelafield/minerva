@@ -43,5 +43,7 @@ namespace www
         std::string m_root_dir;
         std::string m_default_file;
         Json::Value m_config;
+        
+        std::string resolve_secure_path(const std::string& requested_path);
     };
 }

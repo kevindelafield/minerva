@@ -8,6 +8,7 @@
 #include <ostream>
 #include <deque>
 #include <unordered_set>
+#include <memory>
 #include <owl/component.h>
 #include <util/connection.h>
 #include <util/time_utils.h>
@@ -102,7 +103,7 @@ namespace httpd
 
             PROTOCOL protocol = PROTOCOL::HTTP;
             int port = 80;
-            util::connection * conn;
+            std::shared_ptr<util::connection> conn;
         };
 
         void start_listeners();
@@ -118,27 +119,31 @@ namespace httpd
         std::map<int, http_listener> m_listener_sockets;
         std::mutex m_listener_lock;
         std::condition_variable m_listener_cond;
-        volatile bool m_hup = false;
-        volatile bool m_waiting_hup = false;
+        std::atomic<bool> m_hup{false};
+        std::atomic<bool> m_waiting_hup{false};
 
         std::mutex m_log_lock;
         std::deque<std::string> m_cgi_log;
     
-        std::map<int, std::tuple<util::connection *, struct sockaddr_in, socklen_t>> m_socket_map;
+        std::map<int, std::tuple<std::shared_ptr<util::connection>, struct sockaddr_in, socklen_t>> m_socket_map;
 
         void log(http_context & ctx, const std::string & date);
 
-        bool accept(util::connection * conn);
-        
-        bool shutdown(util::connection * conn);
+        // Factory method for creating connections with proper smart pointer management
+        std::shared_ptr<util::connection> create_connection(int socket, PROTOCOL protocol);
+        std::shared_ptr<util::connection> create_listener_connection(PROTOCOL protocol);
 
-        void shutdown_write_async(util::connection * conn);
+        bool accept(std::shared_ptr<util::connection> conn);
         
-        void put_back_connection(util::connection * conn,
+        bool shutdown(std::shared_ptr<util::connection> conn);
+
+        void shutdown_write_async(std::shared_ptr<util::connection> conn);
+        
+        void put_back_connection(std::shared_ptr<util::connection> conn,
                                  const sockaddr_in & addr, 
                                  socklen_t addr_len);
 
-        void handle_request(util::connection * conn, 
+        void handle_request(std::shared_ptr<util::connection> conn, 
                             const struct sockaddr_in & addr, 
                             socklen_t addr_len);
     

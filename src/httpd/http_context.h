@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <util/time_utils.h>
 #include <util/nillable.h>
 #include <util/connection.h>
@@ -14,7 +15,7 @@ namespace httpd
     {
     public:
 
-        http_context(util::connection * conn, std::function<bool()> sdCb)
+        http_context(std::shared_ptr<util::connection> conn, std::function<bool()> sdCb)
         : m_request(this), m_response(this), m_conn(conn), m_timer(true),
           m_sd_cb(sdCb)
             {
@@ -74,7 +75,7 @@ namespace httpd
 
         util::connection * conn() const
         {
-            return m_conn;
+            return m_conn.get();
         }
 
         bool should_shutdown() const
@@ -106,7 +107,7 @@ namespace httpd
         const int DEFAULT_TIMEOUT = 60000;
         http_request m_request;
         http_response m_response;
-        util::connection * m_conn;
+        std::shared_ptr<util::connection> m_conn;
         std::string m_username;
         std::string m_client_ip;
         struct sockaddr_in m_client_addr;
