@@ -24,18 +24,52 @@ namespace minerva
 
     ssl_connection::ssl_connection(int socket) : connection(socket)
     {
-        assert(m_ssl_ctx);
+        if (!m_ssl_ctx)
+        {
+            throw std::runtime_error("SSL context not initialized - call ssl_connection::init() first");
+        }
+        
         m_bio = BIO_new_socket(socket, BIO_NOCLOSE);
+        if (!m_bio)
+        {
+            log_ssl_errors();
+            throw std::runtime_error("Failed to create BIO for SSL connection");
+        }
+        
         m_ssl = SSL_new(m_ssl_ctx);
+        if (!m_ssl)
+        {
+            BIO_free(m_bio);
+            log_ssl_errors();
+            throw std::runtime_error("Failed to create SSL object");
+        }
+        
         SSL_set_bio(m_ssl, m_bio, m_bio);
     }
 
     ssl_connection::ssl_connection(int family, int socktype, int protocol) :
         connection(family, socktype, protocol)
     {
-        assert(m_ssl_ctx);
+        if (!m_ssl_ctx)
+        {
+            throw std::runtime_error("SSL context not initialized - call ssl_connection::init() first");
+        }
+        
         m_bio = BIO_new_socket(socket, BIO_NOCLOSE);
+        if (!m_bio)
+        {
+            log_ssl_errors();
+            throw std::runtime_error("Failed to create BIO for SSL connection");
+        }
+        
         m_ssl = SSL_new(m_ssl_ctx);
+        if (!m_ssl)
+        {
+            BIO_free(m_bio);
+            log_ssl_errors();
+            throw std::runtime_error("Failed to create SSL object");
+        }
+        
         SSL_set_bio(m_ssl, m_bio, m_bio);
     }
 
@@ -101,25 +135,68 @@ namespace minerva
         OpenSSL_add_all_algorithms();
 
         m_ssl_ctx = SSL_CTX_new(TLS_server_method());
-        assert(m_ssl_ctx);
+        if (!m_ssl_ctx)
+        {
+            log_ssl_errors();
+            throw std::runtime_error("Failed to create SSL context");
+        }
 
         SSL_CTX_set_min_proto_version(m_ssl_ctx, TLS1_2_VERSION);
         SSL_CTX_set_max_proto_version(m_ssl_ctx, TLS1_3_VERSION);
+
+        // Security hardening options
+        SSL_CTX_set_options(m_ssl_ctx, 
+                          SSL_OP_NO_SSLv3 |                    // Disable SSL 3.0 (vulnerable)
+                          SSL_OP_NO_TLSv1 |                    // Disable TLS 1.0 (vulnerable)  
+                          SSL_OP_NO_TLSv1_1 |                  // Disable TLS 1.1 (vulnerable)
+                          SSL_OP_NO_COMPRESSION |               // Prevent CRIME attacks
+                          SSL_OP_CIPHER_SERVER_PREFERENCE |     // Server chooses cipher
+                          SSL_OP_SINGLE_DH_USE |                // Forward secrecy (ephemeral DH)
+                          SSL_OP_SINGLE_ECDH_USE);              // Forward secrecy (ephemeral ECDH)
+
+        // Set security level (level 2 = 112-bit minimum security, RSA 2048+)
+        SSL_CTX_set_security_level(m_ssl_ctx, 2);
 
 //        SSL_CTX_set_ecdh_auto(m_ssl_ctx, 1);
 
         int status =
             SSL_CTX_use_certificate_file(m_ssl_ctx, cert_file, 
                                          SSL_FILETYPE_PEM);
-        assert(status > 0);
+        if (status != 1)
+        {
+            log_ssl_errors();
+            SSL_CTX_free(m_ssl_ctx);
+            m_ssl_ctx = nullptr;
+            throw std::runtime_error("Failed to load certificate file");
+        }
+        
         status =
             SSL_CTX_use_PrivateKey_file(m_ssl_ctx, key_file, SSL_FILETYPE_PEM);
-        assert(status > 0);
+        if (status != 1)
+        {
+            log_ssl_errors();
+            SSL_CTX_free(m_ssl_ctx);
+            m_ssl_ctx = nullptr;
+            throw std::runtime_error("Failed to load private key file");
+        }
+        
+        // Verify private key matches certificate
+        if (SSL_CTX_check_private_key(m_ssl_ctx) != 1)
+        {
+            log_ssl_errors();
+            SSL_CTX_free(m_ssl_ctx);
+            m_ssl_ctx = nullptr;
+            throw std::runtime_error("Private key does not match certificate");
+        }
     }
 
     void ssl_connection::destroy()
     {
-        SSL_CTX_free(m_ssl_ctx);
+        if (m_ssl_ctx)
+        {
+            SSL_CTX_free(m_ssl_ctx);
+            m_ssl_ctx = nullptr;
+        }
     }
 
     connection::CONNECTION_STATUS ssl_connection::accept_ssl()
