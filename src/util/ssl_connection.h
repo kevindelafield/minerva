@@ -19,6 +19,14 @@ namespace minerva
         ssl_connection(int family, int socktype, int protocol);
         virtual ~ssl_connection();
 
+        // Explicitly delete copy operations (SSL objects can't be safely copied)
+        ssl_connection(const ssl_connection&) = delete;
+        ssl_connection& operator=(const ssl_connection&) = delete;
+
+        // Move operations for safe resource transfer
+        ssl_connection(ssl_connection&& other) noexcept;
+        ssl_connection& operator=(ssl_connection&& other) noexcept;
+
         CONNECTION_STATUS accept_ssl() override;
 
         CONNECTION_STATUS shutdown() override;

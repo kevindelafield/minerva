@@ -14,7 +14,9 @@
 namespace minerva
 {
 
-    connection::connection(int family, int socktype, int protocol)
+    connection::connection(int family, int socktype, int protocol) :
+        last_read(std::chrono::steady_clock::now()),
+        last_write(std::chrono::steady_clock::now())
     {
         int s = ::socket(family, socktype, protocol);
         if (s == -1)
@@ -25,12 +27,16 @@ namespace minerva
     }
 
     connection::connection(int socket) :
-        socket(socket)
+        socket(socket),
+        last_read(std::chrono::steady_clock::now()),
+        last_write(std::chrono::steady_clock::now())
     {
     }
 
     connection::connection(const connection & conn) :
         socket(dup(conn.get_socket())),
+        last_read(conn.last_read),
+        last_write(conn.last_write),
         overflow(conn.overflow)
     {
         if (socket < 0)
@@ -41,6 +47,8 @@ namespace minerva
 
     connection::connection(connection && conn) :
         socket(conn.socket),
+        last_read(conn.last_read),
+        last_write(conn.last_write),
         overflow(std::move(conn.overflow))
     {
         conn.socket = -1;  // Invalidate source socket (transfer ownership)
@@ -65,6 +73,8 @@ namespace minerva
             
             // Safe to assign now
             socket = new_socket;
+            last_read = conn.last_read;
+            last_write = conn.last_write;
             overflow = conn.overflow;
         }
         return *this;
@@ -80,11 +90,11 @@ namespace minerva
                 close(socket);
             }
             
-            // Transfer ownership
-            socket = conn.socket;
-            overflow = std::move(conn.overflow);
-            
-            // Invalidate source
+        // Transfer ownership
+        socket = conn.socket;
+        last_read = conn.last_read;
+        last_write = conn.last_write;
+        overflow = std::move(conn.overflow);            // Invalidate source
             conn.socket = -1;
         }
         return *this;
@@ -418,6 +428,7 @@ namespace minerva
         
         // r > 0: successful read
         read = r;
+        last_read = std::chrono::steady_clock::now();
         return CONNECTION_OK;
     }
 
@@ -447,6 +458,7 @@ namespace minerva
         }
 
         written = w;
+        last_write = std::chrono::steady_clock::now();
 
         return CONNECTION_OK;
     }

@@ -75,7 +75,48 @@ namespace minerva
 
     ssl_connection::~ssl_connection()
     {
-        SSL_free(m_ssl);
+        if (m_ssl)
+        {
+            SSL_free(m_ssl);  // This also frees the associated BIO
+            m_ssl = nullptr;
+            m_bio = nullptr;  // Just for clarity
+        }
+    }
+
+    ssl_connection::ssl_connection(ssl_connection&& other) noexcept
+        : connection(std::move(other)),  // Move base class
+          m_ssl(other.m_ssl),           // Transfer SSL ownership
+          m_bio(other.m_bio)            // Transfer BIO ownership
+    {
+        // Invalidate source object
+        other.m_ssl = nullptr;
+        other.m_bio = nullptr;
+    }
+
+    ssl_connection& ssl_connection::operator=(ssl_connection&& other) noexcept
+    {
+        if (this != &other)
+        {
+            // Clean up existing resources first
+            if (m_ssl)
+            {
+                SSL_free(m_ssl);  // This also frees m_bio
+                m_ssl = nullptr;
+                m_bio = nullptr;
+            }
+
+            // Move base class
+            connection::operator=(std::move(other));
+
+            // Transfer SSL resources
+            m_ssl = other.m_ssl;
+            m_bio = other.m_bio;
+
+            // Invalidate source
+            other.m_ssl = nullptr;
+            other.m_bio = nullptr;
+        }
+        return *this;
     }
 
     ssl_connection::CONNECTION_STATUS ssl_connection::shutdown()
@@ -322,6 +363,7 @@ namespace minerva
         }
 
         read = status;
+        last_read = std::chrono::steady_clock::now();
         return CONNECTION_STATUS::CONNECTION_OK;
     }
 
@@ -370,6 +412,7 @@ namespace minerva
         }
 
         written = status;
+        last_write = std::chrono::steady_clock::now();
         return CONNECTION_STATUS::CONNECTION_OK;
     }
 }

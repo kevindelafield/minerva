@@ -41,6 +41,9 @@ namespace minerva
 
         connection & operator=(connection && conn);
 
+        std::chrono::steady_clock::time_point last_read;
+        std::chrono::steady_clock::time_point last_write;
+
         std::deque<char> overflow;
 
         virtual CONNECTION_STATUS read(char* buf, size_t length, ssize_t & read);
