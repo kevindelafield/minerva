@@ -21,19 +21,23 @@ namespace minerva
                     std::vector<std::string> & files,
                     const std::string & end_pattern = "");
 
-    constexpr const char FILE_SEPERATOR = '/';
+    // Path validation utilities
+    bool is_path_safe(const std::string & path);
+    std::string normalize_path(const std::string & path);
+
+    constexpr const char FILE_SEPARATOR = '/';
     
     constexpr const char* str_end(const char *str) {
         return *str ? str_end(str + 1) : str;
     }
     
     constexpr bool str_slant(const char *str) {
-        return *str == FILE_SEPERATOR ? 
+        return *str == FILE_SEPARATOR ? 
             true : (*str ? str_slant(str + 1) : false);
     }
     
     constexpr const char* r_slant(const char* str) {
-        return *str == FILE_SEPERATOR ? (str + 1) : r_slant(str - 1);
+        return *str == FILE_SEPARATOR ? (str + 1) : r_slant(str - 1);
     }
     constexpr const char* short_file_name(const char* str) {
         return str_slant(str) ? r_slant(str_end(str)) : str;

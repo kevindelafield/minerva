@@ -37,7 +37,7 @@ namespace minerva
         std::string out;
 
         out.clear();
-        out.reserve((in.size() * 3 / 2) + 2);
+        out.reserve((in.size() * 4 / 3) + 4); // Correct: 3 input bytes -> 4 output bytes
 
         size_t inlen = in.size();
         size_t count = 0;
@@ -76,7 +76,7 @@ namespace minerva
         std::string out;
 
         out.clear();
-        out.reserve((in.size() * 3 / 2) + 2);
+        out.reserve((in.size() * 4 / 3) + 4); // Correct: 3 input bytes -> 4 output bytes
 
         size_t inlen = in.size();
         size_t count = 0;
@@ -114,68 +114,78 @@ namespace minerva
  
     bool from64tobits(const std::string & in, std::string & out)
     {
-        unsigned char digit1, digit2, digit3, digit4;
-
         out.clear();
-
-        out.reserve((in.size() * 2 / 3) + 2);
-
-        size_t count = 0;
-
-        if (in.size() < 3)
-        {
+        
+        if (in.empty()) {
+            return true; // Empty input is valid
+        }
+        
+        // Pre-process: remove whitespace/newlines and skip old "+ " prefix
+        std::string clean;
+        clean.reserve(in.size());
+        
+        size_t start = 0;
+        // Remove the questionable "+ " prefix if present
+        if (in.size() >= 2 && in[0] == '+' && in[1] == ' ') {
+            start = 2;
+        }
+        
+        // Copy non-whitespace characters
+        for (size_t i = start; i < in.size(); ++i) {
+            char c = in[i];
+            if (c == '\r' || c == '\n' || c == ' ' || c == '\t') {
+                continue; // Skip whitespace
+            }
+            if (c == '\r') {
+                break; // Early termination on \r
+            }
+            clean += c;
+        }
+        
+        if (clean.empty()) {
+            return true; // Only whitespace is valid
+        }
+        
+        // Validate length is multiple of 4
+        if (clean.size() % 4 != 0) {
             return false;
         }
-
-        if (in[0] == '+' && in[1] == ' ')
-            count += 2;
-
-        if (in[count] == '\r')
-        {
-            return true;
-        }
-
-        do 
-        {
-            digit1 = static_cast<unsigned char>(in[count+0]);
-            if (DECODE64(digit1) == BAD)
-            {
+        
+        out.reserve((clean.size() * 3 / 4) + 1); // Correct calculation
+        
+        // Process in safe 4-byte chunks
+        for (size_t i = 0; i < clean.size(); i += 4) {
+            unsigned char digit1 = static_cast<unsigned char>(clean[i]);
+            unsigned char digit2 = static_cast<unsigned char>(clean[i+1]);
+            unsigned char digit3 = static_cast<unsigned char>(clean[i+2]);
+            unsigned char digit4 = static_cast<unsigned char>(clean[i+3]);
+            
+            // Validate all digits before processing
+            if (DECODE64(digit1) == BAD || DECODE64(digit2) == BAD) {
                 return false;
             }
-
-            digit2 = static_cast<unsigned char>(in[count+1]);
-            if (DECODE64(digit2) == BAD)
-            {
+            if (digit3 != '=' && DECODE64(digit3) == BAD) {
                 return false;
             }
-
-            digit3 = static_cast<unsigned char>(in[count+2]);
-            if (digit3 != '=' && DECODE64(digit3) == BAD)
-            {
+            if (digit4 != '=' && DECODE64(digit4) == BAD) {
                 return false;
             }
-
-            digit4 = static_cast<unsigned char>(in[count+3]);
-            if (digit4 != '=' && DECODE64(digit4) == BAD)
-            {
-                return false;
-            }
-
-            count += 4;
-            out +=  (DECODE64(digit1) << 2) | (DECODE64(digit2) >> 4);
-            if (digit3 != '=')
-            {
-                out += 
-                    ((DECODE64(digit2) << 4) & 0xf0) | (DECODE64(digit3) >> 2);
-                if (digit4 != '=')
-                {
-                    out += 
-                        ((DECODE64(digit3) << 6) & 0xc0) | DECODE64(digit4);
+            
+            // Decode the 4-byte group
+            out += (DECODE64(digit1) << 2) | (DECODE64(digit2) >> 4);
+            if (digit3 != '=') {
+                out += ((DECODE64(digit2) << 4) & 0xf0) | (DECODE64(digit3) >> 2);
+                if (digit4 != '=') {
+                    out += ((DECODE64(digit3) << 6) & 0xc0) | DECODE64(digit4);
                 }
             }
-        } 
-        while (count < in.size() && in[count] != '\r' && digit4 != '=');
-
+            
+            // Stop at padding
+            if (digit4 == '=' || digit3 == '=') {
+                break;
+            }
+        }
+        
         return true;
     }
 }

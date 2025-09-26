@@ -1,120 +1,197 @@
-#include <algorithm>
-#include <cassert>
-#include <signal.h>
 #include "thread_pool.h"
+#include "log.h"
+#include <cassert>
 
 namespace minerva
 {
 
-    thread_pool::thread_pool(int count) :
-        thread_count(count), running(false), should_shutdown(false)
+    thread_pool::thread_pool(int count) 
+        : thread_count(count)
     {
-        assert(thread_count > 0);
+        if (count <= 0) {
+            throw std::invalid_argument("Thread pool size must be positive");
+        }
     }
 
     thread_pool::~thread_pool()
     {
-        assert(!running);
+        // Safe to call multiple times - destructor ensures cleanup
+        try {
+            stop();
+            wait();
+        } catch (...) {
+            // Don't let exceptions escape destructor
+            // Threads should be joinable, but just in case...
+        }
     }
 
-    void thread_pool::run()
+    void thread_pool::worker_thread()
     {
-        while (!should_shutdown)
-        {
-            work_element work_item = NULL;
+        while (true) {
+            work_element work;
+            
             {
-                std::unique_lock<std::mutex> lk(lock);
-                if (should_shutdown)
-                {
+                std::unique_lock<std::mutex> lock(work_mutex);
+                
+                // Wait for work or shutdown signal
+                work_condition.wait(lock, [this] {
+                    return should_shutdown.load() || !work_items.empty();
+                });
+                
+                // Check for shutdown
+                if (should_shutdown.load() && work_items.empty()) {
                     return;
                 }
-                while (work_items.size() == 0)
-                {
-                    cond.wait(lk);
-                    if (should_shutdown)
-                    {
-                        return;
-                    }
-                }
-                if (should_shutdown)
-                {
-                    return;
-                }
-                if (work_items.size() > 0)
-                {
-                    work_item = work_items.front();
+                
+                // Get work item
+                if (!work_items.empty()) {
+                    work = std::move(work_items.front());
                     work_items.pop();
                 }
             }
-            if (work_item != NULL)
-            {
-                work_item();
+            
+            // Execute work item with exception safety
+            if (work) {
+                try {
+                    work();
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Exception in thread pool worker: " << e.what());
+                } catch (...) {
+                    LOG_ERROR("Unknown exception in thread pool worker");
+                }
             }
         }
     }
 
     void thread_pool::start()
     {
-        assert(!running);
-        running = true;
-        should_shutdown = false;
-        for (int i=0; i<thread_count; i++)
-        {
-            std::thread* t = new std::thread(&thread_pool::run, this);
-            assert(t);
-            threads.insert(t);
+        if (running.load()) {
+            LOG_WARN("Thread pool already running");
+            return;
+        }
+        
+        should_shutdown.store(false);
+        running.store(true);
+        
+        try {
+            threads.reserve(thread_count);
+            for (int i = 0; i < thread_count; ++i) {
+                threads.emplace_back(&thread_pool::worker_thread, this);
+            }
+        } catch (...) {
+            // Cleanup on failure
+            running.store(false);
+            should_shutdown.store(true);
+            work_condition.notify_all();
+            
+            // Join any threads that were created
+            for (auto& thread : threads) {
+                if (thread.joinable()) {
+                    thread.join();
+                }
+            }
+            threads.clear();
+            throw;
         }
     }
 
     void thread_pool::stop()
     {
-        lock.lock();
-        should_shutdown = true;
-        lock.unlock();
-        cond.notify_all();
-        std::for_each(threads.begin(), threads.end(), [](std::thread* thread) {
-                pthread_kill(thread->native_handle(), SIGUSR2);
-            });
+        // Idempotent: safe to call multiple times
+        // Only signal shutdown if we haven't already
+        bool was_shutdown = should_shutdown.exchange(true);
+        if (was_shutdown) {
+            return;  // Already stopped
+        }
+        
+        // Signal all workers to wake up and check shutdown flag
+        work_condition.notify_all();
     }
 
     void thread_pool::wait()
     {
-        assert(running);
-        std::for_each(threads.begin(), threads.end(), [](std::thread* thread) {
-                thread->join();
-            });
-        running = false;
-    }
-
-    void thread_pool::release()
-    {
-        std::for_each(threads.begin(), threads.end(), [](std::thread* thread) {
-                delete thread;
-            });
+        // Idempotent: safe to call multiple times
+        if (!running.load()) {
+            return;  // Already stopped and waited
+        }
+        
+        // Wait for all threads to complete
+        for (auto& thread : threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+        
         threads.clear();
+        running.store(false);
+        
+        // Clear any remaining work items
+        {
+            std::lock_guard<std::mutex> lock(work_mutex);
+            std::queue<work_element> empty_queue;
+            work_items.swap(empty_queue);
+        }
     }
 
-    void thread_pool::queue_work_item(work_element item)
+    bool thread_pool::queue_work_item(work_element work)
     {
-        lock.lock();
-        work_items.emplace(item);
-        lock.unlock();
-        cond.notify_one();
+        if (!running.load()) {
+            return false;  // Thread pool not running
+        }
+        
+        if (should_shutdown.load()) {
+            return false;  // Thread pool stopping
+        }
+        
+        {
+            std::lock_guard<std::mutex> lock(work_mutex);
+            // Double-check shutdown status under lock to avoid race
+            if (should_shutdown.load()) {
+                return false;  // Thread pool stopping
+            }
+            work_items.emplace(std::move(work));
+        }
+        work_condition.notify_one();
+        return true;  // Successfully queued
     }
 
-    void thread_pool::begin_queue_work_item()
+    bool thread_pool::begin_queue_work_item()
     {
-        lock.lock();
+        if (!running.load() || should_shutdown.load()) {
+            return false;  // Thread pool not running or stopping
+        }
+        
+        work_mutex.lock();
+        
+        // Double-check after acquiring lock
+        if (should_shutdown.load()) {
+            work_mutex.unlock();
+            return false;  // Thread pool stopping
+        }
+        
+        return true;  // Successfully started batch mode
     }
 
-    void thread_pool::queue_work_item_batch(work_element item)
+    bool thread_pool::queue_work_item_batch(work_element work)
     {
-        work_items.emplace(item);
-        cond.notify_one();
+        // Assumes caller has locked work_mutex via begin_queue_work_item()
+        // Check shutdown status (caller should have checked, but be safe)
+        if (should_shutdown.load()) {
+            return false;  // Thread pool stopping
+        }
+        
+        work_items.emplace(std::move(work));
+        return true;  // Successfully queued
     }
+    
     void thread_pool::end_queue_work_item()
     {
-        lock.unlock();
+        work_mutex.unlock();
+        work_condition.notify_all();  // Notify all since we may have queued multiple items
+    }    size_t thread_pool::get_queue_size() const
+    {
+        std::lock_guard<std::mutex> lock(work_mutex);
+        return work_items.size();
     }
 
 }

@@ -152,7 +152,6 @@ namespace minerva
                       });
 
         std::for_each(thread_pools.begin(), thread_pools.end(), [](minerva::thread_pool * tp) {
-            tp->release();
             delete tp;
         });
         thread_pools.clear();

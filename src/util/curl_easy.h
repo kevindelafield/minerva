@@ -77,11 +77,13 @@ namespace minerva
                 pList = curl_slist_append(pList, str.c_str());
             }
 
-            slist(const slist & other) = default;
+            // Make non-copyable to prevent double-free bugs
+            slist(const slist & other) = delete;
 
             slist(slist&& other) noexcept
                 : pList(other.pList)
             {
+                other.pList = nullptr;  // Prevent double-free
             }
 
             ~slist()
@@ -92,15 +94,8 @@ namespace minerva
                 }
             }
 
-            slist & operator=(const slist & other)
-            {
-                if (this == &other)
-                {
-                    return *this;
-                }
-                pList = other.pList;
-                return *this;
-            }
+            // Make non-copyable to prevent double-free bugs  
+            slist & operator=(const slist & other) = delete;
 
             slist & operator=(slist && other) noexcept
             {
@@ -108,7 +103,13 @@ namespace minerva
                 {
                     return *this;
                 }
+                // Clean up existing list before taking ownership
+                if (pList != nullptr)
+                {
+                    curl_slist_free_all(pList);
+                }
                 pList = other.pList;
+                other.pList = nullptr;  // Prevent double-free
                 return *this;
             }
 
@@ -234,6 +235,10 @@ namespace minerva
         }
 
         void set_verbose(bool isVerbose) const;
+
+        // SSL certificate verification control (enabled by default for security)
+        CURLcode set_ssl_verify_peer(bool verify);
+        CURLcode set_ssl_verify_host(bool verify);
 
     private:
         static bool isGlobalInitialized;

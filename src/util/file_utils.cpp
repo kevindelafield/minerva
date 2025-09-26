@@ -50,6 +50,7 @@ namespace minerva
             LOG_ERROR_ERRNO("failed to open touch file: " << file, errno);
             return false;
         }
+        
         int status = utimensat(AT_FDCWD,
                                file.c_str(),
                                nullptr,
@@ -57,8 +58,14 @@ namespace minerva
         if (status)
         {
             LOG_ERROR_ERRNO("couldn't touch file: " << file, errno);
+            // Must close fd before returning false
+            if (close(fd))
+            {
+                LOG_ERROR_ERRNO("couldn't close touch file after utimensat failure: " << file, errno);
+            }
             return false;
         }
+        
         status = close(fd);
         if (status)
         {
@@ -81,11 +88,8 @@ namespace minerva
         {
             std::string name(dir->d_name);
 
-            std::stringstream ss;
-            ss << path;
-            ss << "/";
-            ss << name;
-            std::string fp(ss.str());
+            // More efficient string concatenation
+            std::string fp = std::string(path) + "/" + name;
 
             if (name == "." || name == "..")
             {
@@ -120,9 +124,11 @@ namespace minerva
                 }
             }
         }
-        if (closedir(d))
+        int close_status = closedir(d);
+        if (close_status)
         {
             LOG_ERROR_ERRNO("error closing directory: " << path, errno);
+            return false;  // Treat closedir failure as error
         }
         if (::rmdir(path))
         {
@@ -158,11 +164,8 @@ namespace minerva
                 continue;
             }
 
-            std::stringstream ss;
-            ss << path;
-            ss << "/";
-            ss << name;
-            std::string fp(ss.str());
+            // More efficient string concatenation
+            std::string fp = path + "/" + name;
 
             if (name == "." || name == "..")
             {
@@ -181,6 +184,60 @@ namespace minerva
             LOG_ERROR_ERRNO("error closing directory: " << path, errno);
         }
         return true;
+    }
+
+    bool is_path_safe(const std::string & path)
+    {
+        // Check for path traversal attempts
+        if (path.find("..") != std::string::npos)
+        {
+            return false;
+        }
+        
+        // Check for null bytes
+        if (path.find('\0') != std::string::npos)
+        {
+            return false;
+        }
+        
+        // Check for empty path
+        if (path.empty())
+        {
+            return false;
+        }
+        
+        // Check for excessively long paths
+        if (path.length() > 4096)  // PATH_MAX on most systems
+        {
+            return false;
+        }
+        
+        return true;
+    }
+
+    std::string normalize_path(const std::string & path)
+    {
+        if (path.empty())
+        {
+            return "";
+        }
+        
+        std::string result = path;
+        
+        // Replace multiple consecutive separators with single separator
+        std::string::size_type pos = 0;
+        while ((pos = result.find("//", pos)) != std::string::npos)
+        {
+            result.replace(pos, 2, "/");
+        }
+        
+        // Remove trailing separator unless it's the root
+        if (result.length() > 1 && result.back() == '/')
+        {
+            result.pop_back();
+        }
+        
+        return result;
     }
 
 }

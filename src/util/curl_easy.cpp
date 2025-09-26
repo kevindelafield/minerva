@@ -197,6 +197,23 @@ namespace minerva
                 msg << "Failed to set CURL option CURLOPT_HEADERFUNCTION: " << res;
                 throw std::runtime_error(msg.str());
             }
+
+            // Enable SSL certificate verification by default for security
+            res = curl_easy_setopt(this->curl, CURLOPT_SSL_VERIFYPEER, 1L);
+            if (res != CURLE_OK)
+            {
+				std::ostringstream msg;
+                msg << "Failed to set CURL option CURLOPT_SSL_VERIFYPEER: " << res;
+                throw std::runtime_error(msg.str());
+            }
+
+            res = curl_easy_setopt(this->curl, CURLOPT_SSL_VERIFYHOST, 2L);
+            if (res != CURLE_OK)
+            {
+				std::ostringstream msg;
+                msg << "Failed to set CURL option CURLOPT_SSL_VERIFYHOST: " << res;
+                throw std::runtime_error(msg.str());
+            }
         }
     }
            
@@ -300,11 +317,31 @@ namespace minerva
         curl_easy_setopt(this->curl, CURLOPT_VERBOSE, isVerbose ? 1L : 0L);
     }
 
+    CURLcode curl_easy::set_ssl_verify_peer(bool verify)
+    {
+        FAIL_IF_NOT_INITIALIZED();
+        SET_CURLOPT_OR_FAIL(CURLOPT_SSL_VERIFYPEER, verify ? 1L : 0L);
+        return CURLE_OK;
+    }
+
+    CURLcode curl_easy::set_ssl_verify_host(bool verify)
+    {
+        FAIL_IF_NOT_INITIALIZED();
+        SET_CURLOPT_OR_FAIL(CURLOPT_SSL_VERIFYHOST, verify ? 2L : 0L);
+        return CURLE_OK;
+    }
+
     CURLcode curl_easy::post(const slist & headers, 
                              const std::string & body, 
                              http_response & response)
     {
         FAIL_IF_NOT_INITIALIZED();
+
+        // Clear response streams to prevent accumulation between requests
+        this->responseHeaderStream.str("");
+        this->responseHeaderStream.clear();
+        this->responseBodyStream.str("");
+        this->responseBodyStream.clear();
 
         ReadBuffer readBuffer = { body.length(), 0, body.c_str() };
 
@@ -345,6 +382,12 @@ namespace minerva
                              http_response & response)
     {
         FAIL_IF_NOT_INITIALIZED();
+
+        // Clear response streams to prevent accumulation between requests
+        this->responseHeaderStream.str("");
+        this->responseHeaderStream.clear();
+        this->responseBodyStream.str("");
+        this->responseBodyStream.clear();
 
         ReadBuffer readBuffer = 
             { 
@@ -388,6 +431,12 @@ namespace minerva
     CURLcode curl_easy::get(const slist & headers, http_response & response)
     {
         FAIL_IF_NOT_INITIALIZED();
+
+        // Clear response streams to prevent accumulation between requests
+        this->responseHeaderStream.str("");
+        this->responseHeaderStream.clear();
+        this->responseBodyStream.str("");
+        this->responseBodyStream.clear();
 
         if (!this->userAgent.empty())
         {

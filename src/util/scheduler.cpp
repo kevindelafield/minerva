@@ -159,14 +159,14 @@ namespace minerva
         should_shutdown = true;
         cond.notify_one();
         lock.unlock();
-        tp.stop();
+        tp.stop();  // Signal thread pool shutdown
     }
 
     void scheduler::wait()
     {
         assert(running);
         t->join();
-        tp.wait();
+        tp.wait();  // Wait for thread pool threads to exit
         running = false;
     }
 
@@ -174,6 +174,6 @@ namespace minerva
     {
         delete t;
         t = NULL;
-        tp.release();
+        // Thread pool cleanup is handled by its destructor, no explicit release needed
     }
 }

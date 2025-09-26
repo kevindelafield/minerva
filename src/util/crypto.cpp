@@ -1,6 +1,8 @@
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/kdf.h>
 #include <sstream>
 #include <cassert>
 #include <iterator>
@@ -9,7 +11,7 @@
 #include "crypto.h"
 #include "log.h"
 
-namespace util
+namespace minerva
 {
 
     bool base64_encode_openssl(std::vector<char> & in, std::string & out)
@@ -102,21 +104,32 @@ namespace util
             return false;
         }
         
-        std::vector<char> key(32);
-        std::vector<char> iv(32);
+        std::vector<char> key(16); // AES-128 requires 16-byte key
+        std::vector<char> iv(16);  // AES block size is 16 bytes
 
-        LOG_DEBUG("generating key");
+        LOG_DEBUG("generating key with PBKDF2");
 
-        status =
-            EVP_BytesToKey(EVP_aes_128_cbc(), EVP_sha256(),
-                           reinterpret_cast<unsigned char *>(salt.data()),
-                           reinterpret_cast<const unsigned char *>(password.c_str()),
-                           password.length(), 1,
-                           reinterpret_cast<unsigned char *>(key.data()),
-                           reinterpret_cast<unsigned char *>(iv.data()));
-        if (!status)
+        // Use secure PBKDF2 with high iteration count (100,000+ iterations)
+        const int iterations = 100000;
+        status = PKCS5_PBKDF2_HMAC(password.c_str(), password.length(),
+                                   reinterpret_cast<unsigned char*>(salt.data()), salt.size(),
+                                   iterations, EVP_sha256(),
+                                   key.size(), reinterpret_cast<unsigned char*>(key.data()));
+        if (status != 1)
         {
-            LOG_ERROR("failed to generate key");
+            LOG_ERROR("failed to generate key with PBKDF2");
+            return false;
+        }
+
+        // Generate IV separately using PBKDF2 (with different "salt")
+        std::string iv_salt = std::string(salt.begin(), salt.end()) + "IV";
+        status = PKCS5_PBKDF2_HMAC(password.c_str(), password.length(),
+                                   reinterpret_cast<const unsigned char*>(iv_salt.c_str()), iv_salt.length(),
+                                   iterations, EVP_sha256(),
+                                   iv.size(), reinterpret_cast<unsigned char*>(iv.data()));
+        if (status != 1)
+        {
+            LOG_ERROR("failed to generate IV with PBKDF2");
             return false;
         }
         
@@ -136,9 +149,8 @@ namespace util
             return false;
         }
 
-        EVP_CIPHER_CTX_set_key_length(ctx, EVP_MAX_KEY_LENGTH);
-
-        std::vector<char> cipher_text(plain_text.size() + key.size());
+        // Allocate buffer for ciphertext (plaintext + one block for padding)
+        std::vector<char> cipher_text(plain_text.size() + 16);
 
         int total;
 
@@ -219,21 +231,32 @@ namespace util
         std::copy(decoded.begin() + 8, decoded.begin() + 16,
                   std::back_inserter(salt));
 
-    
-        std::vector<char> key(32);
-        std::vector<char> iv(32);
+        std::vector<char> key(16); // AES-128 requires 16-byte key  
+        std::vector<char> iv(16);  // AES block size is 16 bytes
 
-        LOG_DEBUG("generating key");
-        int status =
-            EVP_BytesToKey(EVP_aes_128_cbc(), EVP_sha256(),
-                           reinterpret_cast<unsigned char *>(salt.data()),
-                           reinterpret_cast<const unsigned char *>(password.c_str()),
-                           password.length(), 1,
-                           reinterpret_cast<unsigned char *>(key.data()),
-                           reinterpret_cast<unsigned char *>(iv.data()));
-        if (!status)
+        LOG_DEBUG("generating key with PBKDF2");
+        
+        // Use same secure PBKDF2 as encryption
+        const int iterations = 100000;
+        int status = PKCS5_PBKDF2_HMAC(password.c_str(), password.length(),
+                                       reinterpret_cast<unsigned char*>(salt.data()), salt.size(),
+                                       iterations, EVP_sha256(),
+                                       key.size(), reinterpret_cast<unsigned char*>(key.data()));
+        if (status != 1)
         {
-            LOG_ERROR("failed to generate key");
+            LOG_ERROR("failed to generate key with PBKDF2");
+            return false;
+        }
+
+        // Generate IV separately using PBKDF2 (with different "salt")
+        std::string iv_salt = std::string(salt.begin(), salt.end()) + "IV";
+        status = PKCS5_PBKDF2_HMAC(password.c_str(), password.length(),
+                                   reinterpret_cast<const unsigned char*>(iv_salt.c_str()), iv_salt.length(),
+                                   iterations, EVP_sha256(),
+                                   iv.size(), reinterpret_cast<unsigned char*>(iv.data()));
+        if (status != 1)
+        {
+            LOG_ERROR("failed to generate IV with PBKDF2");
             return false;
         }
 
@@ -264,8 +287,6 @@ namespace util
             EVP_CIPHER_CTX_free(ctx);
             return false;
         }
-
-        EVP_CIPHER_CTX_set_key_length(ctx, EVP_MAX_KEY_LENGTH);
 
         int total;
 
@@ -311,4 +332,4 @@ namespace util
 
         return true;
     }
-}
+} // namespace minerva
