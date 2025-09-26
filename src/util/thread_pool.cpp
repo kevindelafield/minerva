@@ -188,7 +188,9 @@ namespace minerva
     {
         work_mutex.unlock();
         work_condition.notify_all();  // Notify all since we may have queued multiple items
-    }    size_t thread_pool::get_queue_size() const
+    }
+
+    size_t thread_pool::get_queue_size() const
     {
         std::lock_guard<std::mutex> lock(work_mutex);
         return work_items.size();
