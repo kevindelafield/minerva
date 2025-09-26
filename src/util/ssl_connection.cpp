@@ -10,13 +10,14 @@ namespace minerva
     static void log_ssl_errors()
     {
         unsigned long ssl_err = ERR_get_error();
-        while (ssl_err)
+        while (ssl_err != 0)
         {
             char buf[2048];
             ERR_error_string_n(ssl_err, buf, sizeof(buf));
             LOG_ERROR("ssl error: " << buf);
             ssl_err = ERR_get_error();
         }
+        ERR_clear_error(); // Ensure complete error queue cleanup
     }
 
     SSL_CTX * ssl_connection::m_ssl_ctx = nullptr;
