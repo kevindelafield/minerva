@@ -63,6 +63,6 @@ namespace minerva
 
         std::mutex m_lock;
         std::condition_variable m_cond;
-        volatile bool m_locked = false;
+        bool m_locked = false;  // Protected by m_lock mutex - no need for volatile
     };
 }

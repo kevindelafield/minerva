@@ -17,7 +17,7 @@ namespace minerva
         int status = stat(path.c_str(), &sb);
         if (status)
         {
-            return true;
+            return false;  // File doesn't exist - not "empty", just non-existent
         }
         return S_ISREG(sb.st_mode) && sb.st_size == 0;
     }
@@ -94,7 +94,8 @@ namespace minerva
             if (name == "." || name == "..")
             {
             }
-            else if (dir->d_type == DT_DIR)
+            else if (dir->d_type == DT_DIR || 
+                     (dir->d_type == DT_UNKNOWN && file_is_directory(fp)))
             {
                 if (recursive)
                 {
@@ -170,9 +171,10 @@ namespace minerva
             if (name == "." || name == "..")
             {
             }
-            else if (dir->d_type == DT_DIR)
+            else if (dir->d_type == DT_DIR || 
+                     (dir->d_type == DT_UNKNOWN && file_is_directory(fp)))
             {
-                continue;
+                continue;  // Skip directories
             }
             else
             {
@@ -182,14 +184,19 @@ namespace minerva
         if (closedir(d))
         {
             LOG_ERROR_ERRNO("error closing directory: " << path, errno);
+            return false;  // Be consistent with rmdir_r() - treat closedir failure as error
         }
         return true;
     }
 
     bool is_path_safe(const std::string & path)
     {
-        // Check for path traversal attempts
-        if (path.find("..") != std::string::npos)
+        // Check for path traversal attempts - look for "../" or "/.." patterns
+        // This is less strict than rejecting any ".." occurrence
+        if (path.find("../") != std::string::npos ||
+            path.find("/..") != std::string::npos ||
+            path == ".." ||
+            path.substr(0, 3) == "../")
         {
             return false;
         }
