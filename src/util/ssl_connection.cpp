@@ -322,7 +322,6 @@ namespace minerva
         }
 
         read = status;
-        last_read = std::chrono::steady_clock::now();
         return CONNECTION_STATUS::CONNECTION_OK;
     }
 
@@ -371,7 +370,6 @@ namespace minerva
         }
 
         written = status;
-        last_write = std::chrono::steady_clock::now();
         return CONNECTION_STATUS::CONNECTION_OK;
     }
 }

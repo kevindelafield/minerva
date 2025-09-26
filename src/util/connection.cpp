@@ -14,9 +14,7 @@
 namespace minerva
 {
 
-    connection::connection(int family, int socktype, int protocol) :
-        last_read(std::chrono::steady_clock::now()),
-        last_write(std::chrono::steady_clock::now())
+    connection::connection(int family, int socktype, int protocol)
     {
         int s = ::socket(family, socktype, protocol);
         if (s == -1)
@@ -32,7 +30,8 @@ namespace minerva
     }
 
     connection::connection(const connection & conn) :
-        socket(dup(conn.get_socket()))
+        socket(dup(conn.get_socket())),
+        overflow(conn.overflow)
     {
         if (socket < 0)
         {
@@ -41,30 +40,32 @@ namespace minerva
     }
 
     connection::connection(connection && conn) :
-        socket(dup(conn.get_socket()))
+        socket(conn.socket),
+        overflow(std::move(conn.overflow))
     {
-        if (socket < 0)
-        {
-            FATAL_ERRNO("failed to duplicate socket", errno);
-        }
-
-        int status = close(conn.socket);
-        if (status)
-        {
-            FATAL_ERRNO("error closing socket: " << socket, errno);
-        }
-        conn.socket = -1;
+        conn.socket = -1;  // Invalidate source socket (transfer ownership)
     }
 
     connection & connection::operator=(const connection & conn)
     {
         if (this != &conn)
         {
-            socket = dup(conn.get_socket());
-            if (socket < 0)
+            // Duplicate first (can fail without side effects)
+            int new_socket = dup(conn.get_socket());
+            if (new_socket < 0)
             {
                 FATAL_ERRNO("failed to duplicate socket", errno);
             }
+            
+            // Only close old socket after successful dup
+            if (socket >= 0)
+            {
+                close(socket);
+            }
+            
+            // Safe to assign now
+            socket = new_socket;
+            overflow = conn.overflow;
         }
         return *this;
     }
@@ -73,16 +74,17 @@ namespace minerva
     {
         if (this != &conn)
         {
-            socket = dup(conn.get_socket());
-            if (socket < 0)
+            // Close existing socket first to prevent leak
+            if (socket > -1)
             {
-                FATAL_ERRNO("failed to duplicate socket", errno);
+                close(socket);
             }
-            int status = close(conn.socket);
-            if (status)
-            {
-                FATAL_ERRNO("error closing socket: " << socket, errno);
-            }
+            
+            // Transfer ownership
+            socket = conn.socket;
+            overflow = std::move(conn.overflow);
+            
+            // Invalidate source
             conn.socket = -1;
         }
         return *this;
@@ -109,15 +111,29 @@ namespace minerva
         ssize_t r = recv(socket, &buf, 1, MSG_PEEK);
         if (r < 0)
         {
-            LOG_ERROR_ERRNO("failed to peek on socket", errno);
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                // No data available right now (non-blocking socket)
+                available = false;
+                return true;
+            }
+            else
+            {
+                LOG_ERROR_ERRNO("failed to peek on socket", errno);
+                available = false;
+                return false;
+            }
+        }
+        else if (r == 0)
+        {
+            // Connection closed by peer
             available = false;
-            return false;
+            return false;  // Indicate error condition - connection is closed
         }
 
-        available = r > 0;
-
+        // r > 0: data is available
+        available = true;
         return true;
-        
     }
 
     bool connection::get_local_addr(const struct sockaddr_in & client_addr, 
@@ -371,6 +387,13 @@ namespace minerva
     connection::CONNECTION_STATUS connection::read(char* buf, size_t length,
                                                    ssize_t & read)
     {
+        // Handle zero-length read request
+        if (length == 0)
+        {
+            read = 0;
+            return CONNECTION_OK;
+        }
+        
         ssize_t r = recv(socket, buf, length, 0);
         // would block
         if (r < 0)
@@ -386,10 +409,15 @@ namespace minerva
                 return CONNECTION_ERROR;
             }
         }
+        else if (r == 0)
+        {
+            // Peer closed connection (EOF)
+            read = 0;
+            return CONNECTION_CLOSED;
+        }
+        
+        // r > 0: successful read
         read = r;
-
-        last_read = std::chrono::steady_clock::now();
-
         return CONNECTION_OK;
     }
 
@@ -419,8 +447,6 @@ namespace minerva
         }
 
         written = w;
-
-        last_write = std::chrono::steady_clock::now();
 
         return CONNECTION_OK;
     }
