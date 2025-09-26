@@ -102,7 +102,7 @@ namespace minerva
         m_ssl_ctx = SSL_CTX_new(TLS_server_method());
         assert(m_ssl_ctx);
 
-        SSL_CTX_set_min_proto_version(m_ssl_ctx, TLS1_VERSION);
+        SSL_CTX_set_min_proto_version(m_ssl_ctx, TLS1_2_VERSION);
         SSL_CTX_set_max_proto_version(m_ssl_ctx, TLS1_3_VERSION);
 
 //        SSL_CTX_set_ecdh_auto(m_ssl_ctx, 1);
