@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdexcept>
 #include <sstream>
-#include "unique_command.h"
 #include "log.h"
 #include "safe_ofstream.h"
 

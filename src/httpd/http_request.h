@@ -32,7 +32,9 @@ namespace minerva
                 PUT
                 };
     
-        const size_t MAX_CONTENT_LENGTH = 120 * 1024 * 1024;
+        const size_t MAX_CONTENT_LENGTH = 10 * 1024 * 1024; // Reduced from 120MB to 10MB
+        const size_t MAX_HEADER_SIZE = 8 * 1024;            // Maximum size for individual headers
+        const size_t MAX_HEADERS_COUNT = 100;               // Maximum number of headers
 
         http_request(http_context * ctx);
         ~http_request() = default;

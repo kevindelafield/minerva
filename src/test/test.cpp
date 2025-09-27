@@ -19,7 +19,6 @@
 #include <util/exec_utils.h>
 #include <util/string_utils.h>
 #include <util/log.h>
-#include <util/unique_command.h>
 #include <util/connection.h>
 #include <curl/curl.h>
 

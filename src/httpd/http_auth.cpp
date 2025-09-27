@@ -8,8 +8,11 @@
 #include <vector>
 #include <vector>
 #include <fstream>
+#include <random>
+#include <climits>
 #include <openssl/sha.h>
 #include <openssl/md5.h>
+#include <openssl/rand.h>
 #include <time.h>
 #include <stdlib.h>
 #include <util/log.h>
@@ -42,6 +45,20 @@ namespace minerva
 #define CONST_STR_LEN(x) x, (x) ? sizeof(x) - 1 : 0
 
     static const char hex_chars_lc[] = "0123456789abcdef";
+
+    // Constant-time comparison to prevent timing attacks
+    static bool secure_compare(const std::vector<char>& a, const std::vector<char>& b)
+    {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        
+        volatile unsigned char result = 0;
+        for (size_t i = 0; i < a.size(); i++) {
+            result |= (a[i] ^ b[i]);
+        }
+        return result == 0;
+    }
 
     static char* utostr(char * const buf_end, unsigned int val) {
         char *cur = buf_end;
@@ -424,7 +441,18 @@ namespace minerva
     static void set_digest_auth_header(http_context & ctx, const std::string & realm)
     {
         time_t ts = time(nullptr);
-        int rnd = static_cast<int>(random());
+        
+        // Use OpenSSL's cryptographically secure random number generation
+        unsigned char random_bytes[4];
+        if (RAND_bytes(random_bytes, sizeof(random_bytes)) != 1) {
+            LOG_ERROR("Failed to generate secure random number for nonce");
+            // Fallback to time-based approach, though less secure
+            random_bytes[0] = ts & 0xFF;
+            random_bytes[1] = (ts >> 8) & 0xFF;
+            random_bytes[2] = (ts >> 16) & 0xFF;
+            random_bytes[3] = (ts >> 24) & 0xFF;
+        }
+        int rnd = *reinterpret_cast<int*>(random_bytes);
 
         std::stringstream str;
 
@@ -658,7 +686,8 @@ namespace minerva
             return false;
         }
 
-        if (rdigest != digest)
+        // Use constant-time comparison to prevent timing attacks
+        if (!secure_compare(rdigest, digest))
         {
             LOG_WARN("invalid digest password for user: " << username);
             set_digest_auth_header(ctx, entry.realm());
