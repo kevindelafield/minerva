@@ -16,7 +16,7 @@ namespace minerva
     public:
 
         http_context(std::shared_ptr<connection> conn, std::function<bool()> sdCb)
-        : m_request(this), m_response(this), m_conn(conn), m_timer(true),
+        : m_request(this), m_response(this), m_conn(conn), m_timer(),
           m_sd_cb(sdCb)
             {
                 std::memset(&m_client_addr_len, 0, sizeof(m_client_addr_len));

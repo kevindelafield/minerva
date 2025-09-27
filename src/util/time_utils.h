@@ -23,29 +23,26 @@ namespace minerva
         /// Convenience alias
         using time_point = std::chrono::steady_clock::time_point;
 
-        /// Constructor
-        timer(const bool startNow = false);
-
-        /// Destructor
-        virtual ~timer() = default;
+        /// Constructor - timer starts immediately
+        timer();
 
         /// Start the timer
-        virtual void start();
+        void start();
 
         /// Stop the timer
-        virtual void stop();
+        void stop();
 
         /// Clears the timer
-        virtual void reset() noexcept;
+        void reset() noexcept;
 
         /// Get the elapsed time in seconds
-        [[nodiscard]] virtual double get_elapsed_time() const;
+        double get_elapsed_time() const;
 
         /// Get the elapsed time in milliseconds
-        [[nodiscard]] virtual long long get_elapsed_milliseconds() const;
+        long long get_elapsed_milliseconds() const;
 
         /// Determine if the timer is currently running
-        virtual bool is_running();
+        bool is_running();
 
         /*
          * Disable copying / move semantics

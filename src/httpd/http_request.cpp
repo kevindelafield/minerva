@@ -402,7 +402,7 @@ namespace minerva
 
         m_overflow.clear();
 
-        minerva::timer _timer(true);
+        minerva::timer _timer;
 
         while (left > 0)
         {
@@ -418,7 +418,7 @@ namespace minerva
 
     std::istream & http_request::read_fully_chunked(int timeoutMs)
     {
-        minerva::timer _timer(true);
+        minerva::timer _timer;
 
         while (m_chunk_state != CHUNK_STATE::DONE)
         {
@@ -605,7 +605,7 @@ namespace minerva
 
         buffer.clear();
 
-        minerva::timer _timer(true);
+        minerva::timer _timer;
 
         if (m_chunk_state != CHUNK_STATE::READING_CHUNK_HEADER &&
             m_chunk_state != CHUNK_STATE::READING_END &&
@@ -869,7 +869,7 @@ namespace minerva
             return 0;
         }
 
-        minerva::timer _timer(true);
+        minerva::timer _timer;
         size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
         m_total_read += read;
     
@@ -878,7 +878,7 @@ namespace minerva
 
     size_t http_request::read_chunked(char * buf, size_t len, int timeoutMs)
     {
-        minerva::timer _timer(true);
+        minerva::timer _timer;
 
         while (m_chunk_state != CHUNK_STATE::DONE)
         {
@@ -1082,7 +1082,7 @@ namespace minerva
         size_t left = m_content_length - m_total_read - m_overflow.size();
 
         char buf[64*1024];
-        minerva::timer timer(true);
+        minerva::timer timer;
         size_t to_read = std::min(left, sizeof(buf));
         try
         {
@@ -1103,7 +1103,7 @@ namespace minerva
 
     bool http_request::null_body_read_chunked(int timeoutMs)
     {
-        minerva::timer _timer(true);
+        minerva::timer _timer;
 
         try
         {

@@ -230,7 +230,7 @@ namespace minerva
 
     bool httpd::shutdown(std::shared_ptr<connection> conn)
     {
-        timer timer(true);
+        timer timer;
 
         while (!should_shutdown() && timer.get_elapsed_milliseconds() < 15000)
         {
@@ -550,7 +550,7 @@ namespace minerva
 
     bool httpd::accept(std::shared_ptr<connection> conn)
     {
-        timer timer(true);
+        timer timer;
         bool accepted = false;
         bool done = false;
         while (!done &&

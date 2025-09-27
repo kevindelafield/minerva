@@ -30,7 +30,7 @@ namespace epoll
 
     kernel1_read_state(std::shared_ptr<ovhttpd::connection> accepted_socket,
                        const char * buf, int length) :
-        accepted_socket(accepted_socket), _timer(true)
+        accepted_socket(accepted_socket), _timer()
         {
             buffer.insert(buffer.end(), buf, buf + length);
         }
@@ -60,7 +60,7 @@ namespace epoll
                         const std::string &host, const int port) :
         accepted_socket(accepted_socket),
             buf(buf), written(written), total_len(strlen(buf)),
-            _timer(true), address(address), connect(true),
+            _timer(), address(address), connect(true),
             header(header), host(host), port(port)
         {
             assert(written > -1);
@@ -71,7 +71,7 @@ namespace epoll
                         const char* buf, int written) :
         accepted_socket(accepted_socket),
             buf(buf), written(written), total_len(strlen(buf)),
-            _timer(true), connect(false), port(-1)
+            _timer(), connect(false), port(-1)
         {
             assert(written > -1);
             assert(buf);
@@ -106,7 +106,7 @@ namespace epoll
                           const std::string &host, const int port) :
         accepted_socket(accepted_socket), connect_socket(connect_socket),
             address(address), host(host), port(port),
-            header(header), _timer(true)
+            header(header), _timer()
         {
         }
 

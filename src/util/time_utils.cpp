@@ -29,12 +29,9 @@ namespace minerva
         return tm;
     }
 
-    timer::timer(const bool startNow /* = false */) : m_is_running(false)
+    timer::timer() : m_is_running(true)
     {
-        if (startNow)
-        {
-            this->start();
-        }
+        start_time = get_time_now();
     }
 
 
