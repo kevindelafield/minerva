@@ -105,7 +105,7 @@ namespace minerva
         
         // Clear any remaining work items
         {
-            std::unique_lock<std::mutex> lock(work_mutex);
+            std::lock_guard<std::mutex> lock(work_mutex);
             std::queue<work_element> empty_queue;
             work_items.swap(empty_queue);
         }
@@ -122,7 +122,7 @@ namespace minerva
         }
         
         {
-            std::unique_lock<std::mutex> lock(work_mutex);
+            std::lock_guard<std::mutex> lock(work_mutex);
             // Double-check shutdown status under lock to avoid race
             if (should_shutdown.load()) {
                 return false;  // Thread pool stopping
@@ -170,7 +170,7 @@ namespace minerva
 
     size_t thread_pool::get_queue_size() const
     {
-        std::unique_lock<std::mutex> lock(work_mutex);
+        std::lock_guard<std::mutex> lock(work_mutex);
         return work_items.size();
     }
 
