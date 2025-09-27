@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <optional>
+#include <system_error>
 
 namespace minerva
 {
@@ -16,8 +18,27 @@ namespace minerva
      * Example: "550e8400-e29b-41d4-a716-446655440000"
      * 
      * Thread-safe: Yes, libuuid handles thread safety internally
+     * 
+     * @throws std::runtime_error if entropy source is unavailable
      */
     std::string new_guid();
+
+    /**
+     * Generates a new strong Version 4 UUID with enhanced entropy verification.
+     * 
+     * This function performs additional checks on entropy sources and provides
+     * better error reporting than the standard version.
+     * 
+     * @return Optional containing UUID string on success, nullopt on failure
+     */
+    std::optional<std::string> new_strong_guid() noexcept;
+
+    /**
+     * Verifies that cryptographic entropy sources are available.
+     * 
+     * @return true if /dev/urandom is accessible and working
+     */
+    bool verify_entropy_source() noexcept;
 
     /**
      * Generates a new Version 1 (time-based) UUID/GUID string.
@@ -42,8 +63,17 @@ namespace minerva
      * 
      * @return A 32-character hexadecimal string (no hyphens)
      * Example: "550e8400e29b41d4a716446655440000"
+     * 
+     * @throws std::runtime_error if entropy source is unavailable
      */
     std::string new_compact_guid();
+
+    /**
+     * Generates a strong compact GUID with enhanced entropy verification.
+     * 
+     * @return Optional containing compact UUID string on success, nullopt on failure
+     */
+    std::optional<std::string> new_strong_compact_guid() noexcept;
 
     /**
      * Converts a standard GUID to compact format (removes hyphens).

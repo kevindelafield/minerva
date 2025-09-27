@@ -3,16 +3,86 @@
 #include <uuid/uuid.h>
 #include <cstring>
 #include <cstdio>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdexcept>
+#include <optional>
+#include <array>
 
 namespace minerva
 {
+    namespace {
+        // Secure memory clearing function
+        void secure_clear(void* ptr, size_t size) {
+            volatile unsigned char* volatile_ptr = static_cast<volatile unsigned char*>(ptr);
+            for (size_t i = 0; i < size; ++i) {
+                volatile_ptr[i] = 0;
+            }
+        }
+        
+        // Check if we can read from entropy source
+        bool test_entropy_source() {
+            int fd = open("/dev/urandom", O_RDONLY);
+            if (fd < 0) {
+                return false;
+            }
+            
+            unsigned char test_byte;
+            ssize_t result = read(fd, &test_byte, 1);
+            close(fd);
+            
+            return result == 1;
+        }
+    }
+    
+    bool verify_entropy_source() noexcept {
+        try {
+            return test_entropy_source();
+        } catch (...) {
+            return false;
+        }
+    }
     std::string new_guid()
     {
+        if (!verify_entropy_source()) {
+            throw std::runtime_error("Cryptographic entropy source /dev/urandom is not available");
+        }
+        
         uuid_t uuid;
         uuid_generate_random(uuid);  // Explicitly use random (v4) UUID
+        
+        // Note: uuid_generate_random() doesn't return error codes in most implementations,
+        // but we've already verified entropy source availability above
+        
         char s[37];
         uuid_unparse_lower(uuid, s);  // Use lowercase for consistency
+        
+        // Clear the UUID from memory for security
+        secure_clear(uuid, sizeof(uuid));
+        
         return std::string(s);
+    }
+    
+    std::optional<std::string> new_strong_guid() noexcept
+    {
+        try {
+            if (!verify_entropy_source()) {
+                return std::nullopt;
+            }
+            
+            uuid_t uuid;
+            uuid_generate_random(uuid);
+            
+            char s[37];
+            uuid_unparse_lower(uuid, s);
+            
+            // Clear the UUID from memory for security
+            secure_clear(uuid, sizeof(uuid));
+            
+            return std::string(s);
+        } catch (...) {
+            return std::nullopt;
+        }
     }
 
     std::string new_time_guid()
@@ -21,6 +91,10 @@ namespace minerva
         uuid_generate_time(uuid);  // Explicitly use time-based (v1) UUID
         char s[37];
         uuid_unparse_lower(uuid, s);  // Use lowercase for consistency
+        
+        // Clear the UUID from memory for security
+        secure_clear(uuid, sizeof(uuid));
+        
         return std::string(s);
     }
 
@@ -36,6 +110,10 @@ namespace minerva
 
     std::string new_compact_guid()
     {
+        if (!verify_entropy_source()) {
+            throw std::runtime_error("Cryptographic entropy source /dev/urandom is not available");
+        }
+        
         uuid_t uuid;
         uuid_generate_random(uuid);
         char s[33];  // 32 chars + null terminator
@@ -46,7 +124,36 @@ namespace minerva
                 uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
                 uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
         
+        // Clear the UUID from memory for security
+        secure_clear(uuid, sizeof(uuid));
+        
         return std::string(s);
+    }
+    
+    std::optional<std::string> new_strong_compact_guid() noexcept
+    {
+        try {
+            if (!verify_entropy_source()) {
+                return std::nullopt;
+            }
+            
+            uuid_t uuid;
+            uuid_generate_random(uuid);
+            char s[33];  // 32 chars + null terminator
+            
+            // Format as compact hex string
+            snprintf(s, sizeof(s), 
+                    "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                    uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
+                    uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
+            
+            // Clear the UUID from memory for security
+            secure_clear(uuid, sizeof(uuid));
+            
+            return std::string(s);
+        } catch (...) {
+            return std::nullopt;
+        }
     }
 
     std::string guid_to_compact(const std::string& guid_with_hyphens)
