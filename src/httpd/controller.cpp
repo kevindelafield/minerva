@@ -99,7 +99,7 @@ namespace minerva
             {
                 ct = http_content_type::code::CONTENT_TYPE_IMAGE_JPEG;
             }
-            else if (minerva::ci_equals(ext, "html") || minerva::ci_equals(ext, "html"))
+            else if (minerva::ci_equals(ext, "html") || minerva::ci_equals(ext, "htm"))
             {
                 ct = http_content_type::code::CONTENT_TYPE_TEXT_HTML;
             }
