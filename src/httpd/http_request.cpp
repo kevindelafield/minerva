@@ -590,6 +590,10 @@ namespace minerva
                 }
             }
             break;
+            
+            case CHUNK_STATE::DONE:
+                // Should not reach here due to loop condition
+                break;
             }
         }
         return m_fullbuf;
@@ -783,6 +787,10 @@ namespace minerva
                 }
             }
             break;
+            
+            case CHUNK_STATE::DONE:
+                // Should not reach here due to loop condition
+                break;
             }
         }
     }
@@ -1054,6 +1062,10 @@ namespace minerva
                 }
             }
             break;
+            
+            case CHUNK_STATE::DONE:
+                // Should not reach here due to loop condition
+                break;
             }
         }
         return 0;
@@ -1272,6 +1284,10 @@ namespace minerva
                     }
                 }
                 break;
+                
+                case CHUNK_STATE::DONE:
+                    // Should not reach here due to loop condition
+                    break;
                 }
             }
             return true;

@@ -60,6 +60,20 @@ namespace minerva
         return result == 0;
     }
 
+    // Constant-time string comparison to prevent timing attacks
+    static bool secure_compare_strings(const std::string& a, const std::string& b)
+    {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        
+        volatile unsigned char result = 0;
+        for (size_t i = 0; i < a.size(); i++) {
+            result |= (a[i] ^ b[i]);
+        }
+        return result == 0;
+    }
+
     static char* utostr(char * const buf_end, unsigned int val) {
         char *cur = buf_end;
         do {
@@ -100,6 +114,45 @@ namespace minerva
         str = itostr(str, val);
 
         memcpy(buf, str, p_buf_end - str);
+    }
+
+    // Helper function to parse digest key-value pairs
+    static bool parse_digest_keyvalue(const std::string& digest_str, std::map<std::string, std::string>& params) {
+        std::stringstream ss(digest_str);
+        std::string part;
+        
+        // Skip the initial part (should be eaten by caller)
+        while (std::getline(ss, part, ',')) {
+            // Trim whitespace
+            part.erase(0, part.find_first_not_of(" \t"));
+            part.erase(part.find_last_not_of(" \t") + 1);
+            
+            if (part.empty()) continue;
+            
+            // Find the '=' separator
+            size_t pos = part.find('=');
+            if (pos == std::string::npos || pos == 0 || pos == part.size() - 1) {
+                continue; // Skip malformed parts
+            }
+            
+            std::string key = part.substr(0, pos);
+            std::string value = part.substr(pos + 1);
+            
+            // Trim key and value
+            key.erase(0, key.find_first_not_of(" \t"));
+            key.erase(key.find_last_not_of(" \t") + 1);
+            value.erase(0, value.find_first_not_of(" \t"));
+            value.erase(value.find_last_not_of(" \t") + 1);
+            
+            // Remove quotes from value if present
+            if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+                value = value.substr(1, value.size() - 2);
+            }
+            
+            params[key] = value;
+        }
+        
+        return true;
     }
 
     static void buffer_append_uint_hex(std::stringstream & str,
@@ -487,92 +540,38 @@ namespace minerva
             return false;
         }
 
+        // Get remaining authorization header content for parsing
+        std::string digest_params_str;
+        std::getline(ss, digest_params_str);
+
+        // Parse digest parameters using helper function
+        std::map<std::string, std::string> digest_params;
+        if (!parse_digest_keyvalue(digest_params_str, digest_params))
+        {
+            LOG_WARN("failed to parse digest parameters");
+            set_digest_auth_header(ctx, in_realm);
+            return false;
+        }
+
+        // Extract required parameters
+        const std::string& username = digest_params["username"];
+        const std::string& realm = digest_params["realm"];
+        const std::string& nonce = digest_params["nonce"];
+        const std::string& uri = digest_params["uri"];
+        const std::string& qop = digest_params["qop"];
+        const std::string& cnonce = digest_params["cnonce"];
+        const std::string& nc = digest_params["nc"];
+        const std::string& response = digest_params["response"];
+        const std::string& algorithm = digest_params["algorithm"];
+
+        // Parse algorithm if specified
         http_auth_digest_type algo = HTTP_AUTH_DIGEST_NONE;
         int algo_len = 0;
-        std::string username;
-        std::string realm;
-        std::string uri;
-        std::string algorithm;
-        std::string qop;
-        std::string cnonce;
-        std::string nonce;
-        std::string nc;
-        std::string response;
-
-        std::getline(ss, part, ',');
-        while (ss)
+        if (!algorithm.empty() && !digest_algorithm_parse(algorithm, algo, algo_len))
         {
-            std::regex regex("^(.*)=(.*)$");
-            std::smatch match;
-            std::regex_search(part, match, regex);
-            if (match.size() != 3)
-            {
-                LOG_WARN("Invalid digest auth part: " << part);
-                set_digest_auth_header(ctx, in_realm);
-                return false;
-            }
-
-            size_t pos = part.find_first_of('=');
-
-            if (pos == std::string::npos || pos == part.size() - 1 || pos == 0)
-            {
-                LOG_WARN("Invalid digest auth part: " << part);
-                set_digest_auth_header(ctx, in_realm);
-                return false;
-            }
-
-            std::string key = part.substr(0, pos);
-            std::string value = part.substr(pos+1);
-            trim(key, " ");
-            trim(value, "\" ");
-
-            if (key == "username")
-            {
-                username = value;
-            }
-            else if (key == "realm")
-            {
-                realm = value;
-            }
-            else if (key == "uri")
-            {
-                uri = value;
-            }
-            else if (key == "algorithm")
-            {
-                algorithm = value;
-                if (!digest_algorithm_parse(value, algo, algo_len))
-                {
-                    LOG_WARN("unsupported algorithm: " << algorithm);
-                    set_digest_auth_header(ctx, in_realm);
-                    return false;
-                }
-            }
-            else if (key == "qop")
-            {
-                qop = value;
-            }
-            else if (key == "nonce")
-            {
-                nonce = value;
-            }
-            else if (key == "cnonce")
-            {
-                cnonce = value;
-            }
-            else if (key == "nc")
-            {
-                nc = value;
-            }
-            else if (key == "response")
-            {
-                response = value;
-            }
-            else
-            {
-                LOG_WARN("unknown digest part: " << part);
-            }
-            std::getline(ss, part, ',');
+            LOG_WARN("unsupported algorithm: " << algorithm);
+            set_digest_auth_header(ctx, in_realm);
+            return false;
         }
 
         if (username.empty() ||
@@ -755,15 +754,31 @@ namespace minerva
 
         std::string hash = 
             digest_hash_md5(uname, realm, pwd);
-        bool found_user = false;
-
+        
+        // Clear sensitive password data from memory
+        if (!pwd.empty()) {
+            volatile char* pwd_ptr = const_cast<volatile char*>(pwd.data());
+            memset(const_cast<char*>(pwd_ptr), 0, pwd.size());
+        }
+        
+        bool result = false;
         http_auth_user entry;
         if (db.find_user(uname, entry))
         {
-            return hash == entry.hash();
+            // Use constant-time comparison to prevent timing attacks
+            result = secure_compare_strings(hash, entry.hash());
         }
-
-        ctx.response().add_header("WWW-Authenticate", "Basic");
-        return false;
+        
+        // Clear hash from memory after use
+        if (!hash.empty()) {
+            volatile char* hash_ptr = const_cast<volatile char*>(hash.data());
+            memset(const_cast<char*>(hash_ptr), 0, hash.size());
+        }
+        
+        if (!result) {
+            ctx.response().add_header("WWW-Authenticate", "Basic");
+        }
+        
+        return result;
     }
 }

@@ -23,11 +23,11 @@ namespace minerva
          */
         explicit thread_pool(int count);
         
-        // Non-copyable but movable
+        // Non-copyable and non-movable due to atomic and const members
         thread_pool(const thread_pool&) = delete;
         thread_pool& operator=(const thread_pool&) = delete;
-        thread_pool(thread_pool&&) = default;
-        thread_pool& operator=(thread_pool&&) = default;
+        thread_pool(thread_pool&&) = delete;
+        thread_pool& operator=(thread_pool&&) = delete;
 
         /**
          * Destructor automatically stops the thread pool and waits for completion.

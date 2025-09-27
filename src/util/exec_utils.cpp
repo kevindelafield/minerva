@@ -713,8 +713,8 @@ namespace minerva
 
         p[0].fd = fileno(m_out);
         p[1].fd = fileno(m_err);
-        p[0].events = POLLIN | POLLERR || POLLRDHUP;
-        p[1].events = POLLIN | POLLERR || POLLRDHUP;
+        p[0].events = POLLIN | POLLERR | POLLRDHUP;
+        p[1].events = POLLIN | POLLERR | POLLRDHUP;
 
         if (::poll(p, 2, ms) < 0)
         {

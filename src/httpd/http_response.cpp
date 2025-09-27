@@ -128,6 +128,12 @@ namespace minerva
                     writing = false;
                 }
                 break;
+                case connection::CONNECTION_CLOSED:
+                {
+                    LOG_DEBUG("Connection closed during write");
+                    return false;
+                }
+                break;
                 }
             }
             to_read = std::min(static_cast<size_t>(length), BUFFER_SIZE);

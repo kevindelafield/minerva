@@ -94,7 +94,7 @@ static void hup_handler(int signal)
             ws->add_listener(httpd::PROTOCOL::HTTP, port);
         }
         
-        if (config.isMember("https.port") && config["https.port"].isInt());
+        if (config.isMember("https.port") && config["https.port"].isInt())
         {
             int port = config["https.port"].asInt();
             LOG_INFO("adding https port: " << port);
@@ -212,7 +212,7 @@ int main(int argc, char** argv)
         k1->add_listener(httpd::PROTOCOL::HTTP, port);
     }
     
-    if (config.isMember("https.port") && config["https.port"].isInt());
+    if (config.isMember("https.port") && config["https.port"].isInt())
     {
         int port = config["https.port"].asInt();
         k1->add_listener(httpd::PROTOCOL::HTTPS, port);
