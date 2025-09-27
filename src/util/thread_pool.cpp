@@ -15,14 +15,8 @@ namespace minerva
 
     thread_pool::~thread_pool()
     {
-        // Safe to call multiple times - destructor ensures cleanup
-        try {
-            stop();
-            wait();
-        } catch (...) {
-            // Don't let exceptions escape destructor
-            // Threads should be joinable, but just in case...
-        }
+        stop();
+        wait();
     }
 
     void thread_pool::worker_thread()
@@ -73,25 +67,9 @@ namespace minerva
         should_shutdown.store(false);
         running.store(true);
         
-        try {
-            threads.reserve(thread_count);
-            for (int i = 0; i < thread_count; ++i) {
-                threads.emplace_back(&thread_pool::worker_thread, this);
-            }
-        } catch (...) {
-            // Cleanup on failure
-            running.store(false);
-            should_shutdown.store(true);
-            work_condition.notify_all();
-            
-            // Join any threads that were created
-            for (auto& thread : threads) {
-                if (thread.joinable()) {
-                    thread.join();
-                }
-            }
-            threads.clear();
-            throw;
+        threads.reserve(thread_count);
+        for (int i = 0; i < thread_count; ++i) {
+            threads.emplace_back(&thread_pool::worker_thread, this);
         }
     }
 
@@ -127,7 +105,7 @@ namespace minerva
         
         // Clear any remaining work items
         {
-            std::lock_guard<std::mutex> lock(work_mutex);
+            std::unique_lock<std::mutex> lock(work_mutex);
             std::queue<work_element> empty_queue;
             work_items.swap(empty_queue);
         }
@@ -144,7 +122,7 @@ namespace minerva
         }
         
         {
-            std::lock_guard<std::mutex> lock(work_mutex);
+            std::unique_lock<std::mutex> lock(work_mutex);
             // Double-check shutdown status under lock to avoid race
             if (should_shutdown.load()) {
                 return false;  // Thread pool stopping
@@ -192,7 +170,7 @@ namespace minerva
 
     size_t thread_pool::get_queue_size() const
     {
-        std::lock_guard<std::mutex> lock(work_mutex);
+        std::unique_lock<std::mutex> lock(work_mutex);
         return work_items.size();
     }
 
