@@ -137,7 +137,7 @@ namespace minerva
 
     void scheduler::run()
     {
-        while (!should_shutdown)
+        while (!should_shutdown.load())
         {
             wait_for_signal();
             run_jobs();
@@ -156,7 +156,7 @@ namespace minerva
     void scheduler::stop()
     {
         lock.lock();
-        should_shutdown = true;
+        should_shutdown.store(true);
         cond.notify_one();
         lock.unlock();
         tp.stop();  // Signal thread pool shutdown

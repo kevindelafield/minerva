@@ -7,6 +7,7 @@
 #include <thread>
 #include <memory>
 #include <functional>
+#include <atomic>
 #include "thread_pool.h"
 
 namespace minerva
@@ -37,7 +38,7 @@ namespace minerva
         std::set<std::tuple<std::chrono::steady_clock::time_point,
             std::shared_ptr<job_entry>>> jobs;
         thread_pool tp;
-        volatile bool should_shutdown;
+        std::atomic<bool> should_shutdown;
         bool running;
 
         void wait_for_signal();
