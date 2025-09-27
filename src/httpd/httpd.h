@@ -12,7 +12,7 @@
 #include <owl/component.h>
 #include <util/connection.h>
 #include <util/time_utils.h>
-#include <util/nillable.h>
+
 #include "http_request.h"
 #include "http_response.h"
 #include "http_auth.h"

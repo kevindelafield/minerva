@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <fstream>
+#include <cassert>
 #include <util/safe_ofstream.h>
 #include <util/log.h>
 #include "auth_db.h"

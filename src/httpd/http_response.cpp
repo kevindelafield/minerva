@@ -1,3 +1,4 @@
+#include <cassert>
 #include "http_response.h"
 #include "http_context.h"
 #include "http_exception.h"

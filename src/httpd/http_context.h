@@ -4,7 +4,7 @@
 #include <functional>
 #include <memory>
 #include <util/time_utils.h>
-#include <util/nillable.h>
+#include <optional>
 #include <util/connection.h>
 #include "http_request.h"
 #include "http_response.h"
@@ -24,7 +24,7 @@ namespace minerva
 
         ~http_context() = default;
 
-        nillable<std::function<void()>> post_command() const
+        std::optional<std::function<void()>> post_command() const
         {
             return m_post_command;
         }
@@ -58,7 +58,7 @@ namespace minerva
             return m_username;
         }
 
-        void post_command(const nillable<std::function<void()>> & cmd)
+        void post_command(const std::optional<std::function<void()>> & cmd)
         {
             m_post_command = cmd;
         }
@@ -115,7 +115,7 @@ namespace minerva
         int m_timeout_msecs = DEFAULT_TIMEOUT;
         minerva::timer m_timer;
         std::function<bool()> m_sd_cb;
-        nillable<std::function<void()>> m_post_command;
+        std::optional<std::function<void()>> m_post_command;
 
     };
 }
