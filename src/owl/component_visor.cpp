@@ -144,7 +144,7 @@ namespace minerva
     {
         assert(!running);
 
-        sched.release();
+        // Scheduler cleanup is now automatic via destructor
 
         std::for_each(components.begin(), components.end(),
                       [](auto & it) {

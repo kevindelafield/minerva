@@ -1,19 +1,25 @@
 #include <algorithm>
 #include <vector>
 #include <cassert>
+#include <memory>
 #include "scheduler.h"
 #include "log.h"
 
 namespace minerva
 {
 
-    scheduler::scheduler(int threads) : should_shutdown(false), running(false), t(NULL), tp(threads)
+    scheduler::scheduler(int threads) : should_shutdown(false), running(false), t(nullptr), tp(threads)
     {
     }
 
     scheduler::~scheduler()
     {
-        assert(!running);
+        if (running)
+        {
+            stop();
+            wait();
+        }
+        // unique_ptr automatically cleans up the thread
     }
 
     scheduler::job_handle scheduler::schedule_job(job_element job,
@@ -28,10 +34,11 @@ namespace minerva
         auto tuple = std::make_tuple(when, entry);
 
         // add the job and notify the thread
-        lock.lock();
-        jobs.insert(tuple);
-        cond.notify_one();
-        lock.unlock();
+        {
+            std::lock_guard<std::mutex> lk(lock);
+            jobs.insert(tuple);
+            cond.notify_one();
+        }
 
         return job_handle(tuple);
     }
@@ -63,12 +70,8 @@ namespace minerva
     {
         std::unique_lock<std::mutex> lk(lock);
 
-        // get next run
-        auto it = std::min_element(jobs.begin(), jobs.end(),
-                                   [] (auto j1, auto j2)
-                                   {
-                                       return std::get<0>(j1) < std::get<0>(j2);
-                                   });
+        // get next run - set is already sorted, so just use begin()
+        auto it = jobs.begin();
 
         auto now = std::chrono::steady_clock::now();
 
@@ -86,50 +89,57 @@ namespace minerva
 
     void scheduler::run_jobs()
     {
-        lock.lock();
-
-        auto first_to_remove(jobs.end());
-        auto last_to_remove(jobs.begin());
-
-        auto now = std::chrono::steady_clock::now();
-
-        // find all expired jobs
-        // scan the list until times not expired
-        for (auto it = jobs.begin(); it != jobs.end(); it++)
+        std::vector<job_element> to_run;
+        
+        // Critical section: find and extract expired jobs
         {
-            if (std::get<0>(*it) <= now)
+            std::lock_guard<std::mutex> lk(lock);
+            
+            auto now = std::chrono::steady_clock::now();
+
+            // Find all expired jobs (jobs are sorted earliest→latest)
+            auto expired_end = jobs.begin();
+            for (auto it = jobs.begin(); it != jobs.end(); ++it)
             {
-                last_to_remove++;
-                if (first_to_remove == jobs.end())
+                if (std::get<0>(*it) <= now)
                 {
-                    first_to_remove = it;
+                    expired_end = std::next(it);  // Point to one past the last expired job
+                }
+                else
+                {
+                    break;  // Since sorted, no more expired jobs
                 }
             }
-            else
-            {
-                break;
-            }
-        }
 
-        // copy jobs to run and remove them from the jobs
-        std::vector<job_element> to_run;
-        if (first_to_remove != jobs.end())
-        {
-            for (auto it = first_to_remove; it != last_to_remove; it++)
+            // Copy expired jobs to run and remove them from the set
+            for (auto it = jobs.begin(); it != expired_end; ++it)
             {
                 to_run.push_back(std::get<1>(*it)->job);
             }
-            jobs.erase(first_to_remove, last_to_remove);
+            
+            if (expired_end != jobs.begin())
+            {
+                jobs.erase(jobs.begin(), expired_end);
+            }
         }
 
-        lock.unlock();
-
-        // run jobs
+        // run jobs with exception safety
         tp.begin_queue_work_item();
         std::for_each(to_run.begin(), to_run.end(), [this] (auto it) {
                 this->tp.queue_work_item_batch([it]()
                                                {
-                                                   it();
+                                                   try
+                                                   {
+                                                       it();
+                                                   }
+                                                   catch (const std::exception& e)
+                                                   {
+                                                       LOG_ERROR("Scheduled job threw exception: " << e.what());
+                                                   }
+                                                   catch (...)
+                                                   {
+                                                       LOG_ERROR("Scheduled job threw unknown exception");
+                                                   }
                                                });
                     });
         tp.end_queue_work_item();
@@ -147,7 +157,7 @@ namespace minerva
     void scheduler::start()
     {
         assert(!running);
-        t = new std::thread(&scheduler::run, this);    
+        t = std::make_unique<std::thread>(&scheduler::run, this);
         assert(t);
         tp.start();
         running = true;
@@ -155,11 +165,10 @@ namespace minerva
 
     void scheduler::stop()
     {
-        lock.lock();
+        std::unique_lock<std::mutex> lk(lock);
         should_shutdown.store(true);
         cond.notify_one();
-        lock.unlock();
-        tp.stop();  // Signal thread pool shutdown
+        tp.stop();  // Now called within the lock for thread safety
     }
 
     void scheduler::wait()
@@ -170,10 +179,5 @@ namespace minerva
         running = false;
     }
 
-    void scheduler::release()
-    {
-        delete t;
-        t = NULL;
-        // Thread pool cleanup is handled by its destructor, no explicit release needed
-    }
+
 }

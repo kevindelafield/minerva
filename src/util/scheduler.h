@@ -32,7 +32,7 @@ namespace minerva
 
         };
 
-        std::thread* t;
+        std::unique_ptr<std::thread> t;
         std::mutex lock;
         std::condition_variable cond;
         std::set<std::tuple<std::chrono::steady_clock::time_point,
@@ -88,7 +88,5 @@ namespace minerva
         void stop();
 
         void wait();
-
-        void release();
     };
 }
