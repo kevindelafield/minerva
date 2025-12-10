@@ -1,4 +1,5 @@
 #include <sstream>
+#include <iterator>
 #include <regex>
 #include <cassert>
 #include <curl/curl.h>

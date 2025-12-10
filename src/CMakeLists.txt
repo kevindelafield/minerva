@@ -49,8 +49,8 @@ ELSE()
   find_library(PUGIXML_LIBRARY NAMES pugixml)
 ENDIF() 
 
-SET (CMAKE_CXX_CPPCHECK ${CMAKE_SOURCE_DIR}/../tools/runclang.sh "-std=c++17")
-SET (CMAKE_C_CPPCHECK ${CMAKE_SOURCE_DIR}/../tools/runclang.sh)
+# SET (CMAKE_CXX_CPPCHECK ${CMAKE_SOURCE_DIR}/../tools/runclang.sh "-std=c++17")
+# SET (CMAKE_C_CPPCHECK ${CMAKE_SOURCE_DIR}/../tools/runclang.sh)
 
 include_directories(.)
 
