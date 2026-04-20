@@ -146,9 +146,9 @@ namespace minerva
         return true;
     }
 
-    bool connection::get_local_addr(const struct sockaddr_in & client_addr, 
+    bool connection::get_local_addr(const struct sockaddr_storage & client_addr,
                                     socklen_t &client_addr_len,
-                                    struct sockaddr_in & addr,
+                                    struct sockaddr_storage & addr,
                                     socklen_t & addr_len)
     {
         int status = ::getsockname(socket, (struct sockaddr *)&addr, &addr_len);
@@ -267,7 +267,7 @@ namespace minerva
         return true;
     }
 
-    bool connection::accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags, int & sock)
+    bool connection::accept(struct sockaddr_storage & addr, socklen_t &addr_len, int flags, int & sock)
     {
         int s = ::accept4(socket, (struct sockaddr *)&addr, &addr_len,
             flags);

@@ -69,9 +69,9 @@ namespace minerva
             bool error;
         };
 
-        bool get_local_addr(const struct sockaddr_in & addr, 
+        bool get_local_addr(const struct sockaddr_storage & addr,
                            socklen_t &addr_len,
-                           struct sockaddr_in & out_addr,
+                           struct sockaddr_storage & out_addr,
                            socklen_t & out_addr_len);
 
         bool set_close_on_exec(bool close);
@@ -86,7 +86,7 @@ namespace minerva
 
         bool listen(int backlog);
     
-        bool accept(struct sockaddr_in & addr, socklen_t &addr_len, int flags,
+        bool accept(struct sockaddr_storage & addr, socklen_t &addr_len, int flags,
                     int & s);
 
         bool data_available(bool & available);

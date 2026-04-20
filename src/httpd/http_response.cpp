@@ -44,17 +44,30 @@ namespace minerva
 
     constexpr static size_t BUFFER_SIZE = 15*1024;
 
+    static bool header_value_safe(const std::string & v)
+    {
+        // Reject CR/LF/NUL to prevent response splitting / header injection
+        return v.find_first_of("\r\n", 0) == std::string::npos &&
+               v.find('\0') == std::string::npos;
+    }
+
     bool http_response::send_buffer(std::istream & is)
     {
         is.seekg(0, is.end);
-        auto length = is.tellg();
+        std::streamoff length_off = is.tellg();
         is.seekg(0, is.beg);
+
+        if (length_off <= 0)
+        {
+            return true;
+        }
+        size_t length = static_cast<size_t>(length_off);
 
         char buf[BUFFER_SIZE];
 
         bool writing = true;
 
-        size_t to_read = std::min(static_cast<size_t>(length), BUFFER_SIZE);
+        size_t to_read = std::min(length, BUFFER_SIZE);
         while (to_read > 0)
         {
             is.read(buf, to_read);
@@ -136,7 +149,7 @@ namespace minerva
                 break;
                 }
             }
-            to_read = std::min(static_cast<size_t>(length), BUFFER_SIZE);
+            to_read = std::min(length, BUFFER_SIZE);
         }
         return true;
     }
@@ -220,9 +233,16 @@ namespace minerva
         }
         for (auto & pair : headers())
         {
-            os << std::get<0>(pair);
+            const std::string & k = std::get<0>(pair);
+            const std::string & v = std::get<1>(pair);
+            if (!header_value_safe(k) || !header_value_safe(v))
+            {
+                LOG_WARN("refusing to write header with CR/LF/NUL: " << k);
+                continue;
+            }
+            os << k;
             os << ": ";
-            os << std::get<1>(pair);
+            os << v;
             os << CRLF;
         }
         os << CRLF;

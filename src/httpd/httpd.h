@@ -45,6 +45,7 @@ namespace minerva
     
         void initialize() override;
         void start() override;
+        void stop() override;
         void release() override;
         void hup() override;
     
@@ -66,6 +67,7 @@ namespace minerva
         
         void auth_db(http_auth_db * db)
         {
+            std::unique_lock<std::mutex> lk(lock);
             m_auth_db = db;
         }
 
@@ -114,6 +116,10 @@ namespace minerva
         std::atomic<unsigned long long> m_active_count;
         std::atomic<unsigned long long> m_request_count;
         http_auth_db * m_auth_db = nullptr;
+        http_auth_nonce_store m_nonce_store;
+
+        controller * get_default_controller();
+        http_auth_db * get_auth_db();
 
         std::vector<http_listener> m_listeners;
         std::map<int, http_listener> m_listener_sockets;
@@ -125,7 +131,15 @@ namespace minerva
         std::mutex m_log_lock;
         std::deque<std::string> m_cgi_log;
     
-        std::map<int, std::tuple<std::shared_ptr<connection>, struct sockaddr_in, socklen_t>> m_socket_map;
+        // Map of currently-idle keep-alive connections, keyed by the
+        // connection's identity (raw pointer of the shared_ptr) rather than
+        // the file descriptor.  This avoids races where the kernel reuses
+        // a closed fd for a freshly-accepted connection while the old entry
+        // is still being drained.
+        std::map<connection *,
+                 std::tuple<std::shared_ptr<connection>,
+                            struct sockaddr_storage,
+                            socklen_t>> m_socket_map;
 
         void log(http_context & ctx, const std::string & date);
 
@@ -140,11 +154,11 @@ namespace minerva
         void shutdown_write_async(std::shared_ptr<connection> conn);
         
         void put_back_connection(std::shared_ptr<connection> conn,
-                                 const sockaddr_in & addr, 
+                                 const sockaddr_storage & addr, 
                                  socklen_t addr_len);
 
         void handle_request(std::shared_ptr<connection> conn, 
-                            const struct sockaddr_in & addr, 
+                            const struct sockaddr_storage & addr, 
                             socklen_t addr_len);
     
         bool write_100_continue_header(http_context & ctx);

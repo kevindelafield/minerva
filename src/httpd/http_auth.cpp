@@ -13,6 +13,8 @@
 #include <openssl/sha.h>
 #include <openssl/md5.h>
 #include <openssl/rand.h>
+#include <openssl/crypto.h>
+#include <openssl/hmac.h>
 #include <time.h>
 #include <stdlib.h>
 #include <util/log.h>
@@ -36,6 +38,17 @@ namespace minerva
     }
 
     static const int MAX_BASIC_AUTH_HDR_LEN = 256;
+
+    // Securely zero a std::string's contents. Uses OPENSSL_cleanse so the
+    // compiler cannot elide the write.
+    static void secure_zero_string(std::string & s)
+    {
+        if (!s.empty())
+        {
+            OPENSSL_cleanse(&s[0], s.size());
+        }
+        s.clear();
+    }
 
     const int HTTP_AUTH_DIGEST_MD5_BINLEN = 16; /* MD5_DIGEST_LENGTH */
     const int HTTP_AUTH_DIGEST_SHA256_BINLEN = 32; /* SHA256_DIGEST_LENGTH */
@@ -173,7 +186,7 @@ namespace minerva
         }
     }
 
-    static void digest_mutate_sha256(http_auth_digest_type algo,
+    static bool digest_mutate_sha256(http_auth_digest_type algo,
                                      const std::string & digest,
                                      const std::string & method,
                                      const std::string & uri,
@@ -188,8 +201,13 @@ namespace minerva
         char a2[HTTP_AUTH_DIGEST_SHA256_BINLEN*2+1];
         char digest_a[HTTP_AUTH_DIGEST_SHA256_BINLEN];
 
-        assert(digest.size() == HTTP_AUTH_DIGEST_SHA256_BINLEN*2);
-        std::strncpy(a1, digest.c_str(), sizeof(a1));
+        if (digest.size() != HTTP_AUTH_DIGEST_SHA256_BINLEN*2)
+        {
+            LOG_WARN("invalid sha256 digest length: " << digest.size());
+            return false;
+        }
+        std::memcpy(a1, digest.data(), HTTP_AUTH_DIGEST_SHA256_BINLEN*2);
+        a1[HTTP_AUTH_DIGEST_SHA256_BINLEN*2] = '\0';
 
         /* calculate H(A2) */
         SHA256_Init(&ctx);
@@ -218,6 +236,7 @@ namespace minerva
 
         std::copy(&digest_a[0], &digest_a[0] + HTTP_AUTH_DIGEST_SHA256_BINLEN,
                   std::back_inserter(dig));
+        return true;
     }
 
     static void digest_mutate_sha256(http_auth_digest_type algo,
@@ -259,11 +278,11 @@ namespace minerva
     
         tohex(a1, sizeof(a1), digest, sizeof(digest));
 
-        digest_mutate_sha256(algo, std::string(a1), method, uri,
-                             nonce, cnonce, nc, qop, dig);
+        (void)digest_mutate_sha256(algo, std::string(a1), method, uri,
+                                   nonce, cnonce, nc, qop, dig);
     }
 
-    static void digest_mutate_md5(http_auth_digest_type algo,
+    static bool digest_mutate_md5(http_auth_digest_type algo,
                                   const std::string & digest,
                                   const std::string & method,
                                   const std::string & uri,
@@ -278,9 +297,13 @@ namespace minerva
         char a2[HTTP_AUTH_DIGEST_MD5_BINLEN*2+1];
         char digest_a[HTTP_AUTH_DIGEST_MD5_BINLEN];
 
-        assert(digest.size() == HTTP_AUTH_DIGEST_MD5_BINLEN*2);
-        
-        std::strncpy(a1, digest.c_str(), sizeof(a1));
+        if (digest.size() != HTTP_AUTH_DIGEST_MD5_BINLEN*2)
+        {
+            LOG_WARN("invalid md5 digest length: " << digest.size());
+            return false;
+        }
+        std::memcpy(a1, digest.data(), HTTP_AUTH_DIGEST_MD5_BINLEN*2);
+        a1[HTTP_AUTH_DIGEST_MD5_BINLEN*2] = '\0';
 
         /* calculate H(A2) */
         MD5_Init(&ctx);
@@ -310,6 +333,7 @@ namespace minerva
 
         std::copy(&digest_a[0], &digest_a[0] + HTTP_AUTH_DIGEST_MD5_BINLEN,
                   std::back_inserter(dig));
+        return true;
     }
 
     std::string digest_hash_md5(const std::string & username,
@@ -329,6 +353,27 @@ namespace minerva
         MD5_Update(&ctx, CONST_STR_LEN(":"));
         MD5_Update(&ctx, password.c_str(), password.size());
         MD5_Final((unsigned char *)digest, &ctx);
+
+        tohex(a1, sizeof(a1), digest, sizeof(digest));
+
+        return std::string(a1);
+    }
+
+    std::string digest_hash_sha256(const std::string & username,
+                                   const std::string & realm,
+                                   const std::string & password)
+    {
+        SHA256_CTX ctx;
+        char a1[HTTP_AUTH_DIGEST_SHA256_BINLEN*2+1];
+        char digest[HTTP_AUTH_DIGEST_SHA256_BINLEN];
+
+        SHA256_Init(&ctx);
+        SHA256_Update(&ctx, username.c_str(), username.size());
+        SHA256_Update(&ctx, CONST_STR_LEN(":"));
+        SHA256_Update(&ctx, realm.c_str(), realm.size());
+        SHA256_Update(&ctx, CONST_STR_LEN(":"));
+        SHA256_Update(&ctx, password.c_str(), password.size());
+        SHA256_Final((unsigned char *)digest, &ctx);
 
         tohex(a1, sizeof(a1), digest, sizeof(digest));
 
@@ -376,56 +421,26 @@ namespace minerva
 
         tohex(a1, sizeof(a1), digest, sizeof(digest));
 
-        digest_mutate_md5(algo, std::string(a1), 
-                          method, uri, nonce, cnonce, nc, qop, dig);
-    }
-
-    static void digest_nonce_md5(std::stringstream & str, time_t cur_ts, int rnd)
-    {
-        MD5_CTX ctx;
-        unsigned char h[HTTP_AUTH_DIGEST_MD5_BINLEN];
-        char hh[HTTP_AUTH_DIGEST_MD5_BINLEN*2+1];
-        MD5_Init(&ctx);
-        itostrn(hh, sizeof(hh), cur_ts);
-        MD5_Update(&ctx, (unsigned char *)hh, strlen(hh));
-        itostrn(hh, sizeof(hh), rnd);
-        MD5_Update(&ctx, (unsigned char *)hh, strlen(hh));
-        MD5_Final(h, &ctx);
-        tohex(hh, sizeof(hh), (const char *)h, sizeof(h));
-        hh[sizeof(hh)-1] = 0;
-        str << hh;
-    }
-
-    static void digest_nonce_sha256(std::stringstream & str,
-                                    time_t cur_ts,
-                                    int rnd)
-    {
-        SHA256_CTX ctx;
-        unsigned char h[HTTP_AUTH_DIGEST_SHA256_BINLEN];
-        char hh[HTTP_AUTH_DIGEST_SHA256_BINLEN*2+1];
-        SHA256_Init(&ctx);
-        itostrn(hh, sizeof(hh), cur_ts);
-        SHA256_Update(&ctx, (unsigned char *)hh, strlen(hh));
-        itostrn(hh, sizeof(hh), rnd);
-        SHA256_Update(&ctx, (unsigned char *)hh, strlen(hh));
-        SHA256_Final(h, &ctx);
-        tohex(hh, sizeof(hh), (const char *)h, sizeof(h));
-        hh[sizeof(hh)-1] = 0;
-        str << hh;
+        (void)digest_mutate_md5(algo, std::string(a1), 
+                                method, uri, nonce, cnonce, nc, qop, dig);
     }
 
     static bool digest_hex2bin(const std::string & hexstr, std::vector<char> & bin)
     {
-        /* validate and transform 32-byte MD5 hex string to 16-byte binary MD5,
-         * or 64-byte SHA-256 or SHA-512-256 hex string to 32-byte binary digest */
-        if (hexstr.size() > (bin.size() << 1))
+        // Require exact length: 32 hex chars -> 16 bytes (MD5),
+        // or 64 hex chars -> 32 bytes (SHA-256). Odd-length is invalid.
+        if ((hexstr.size() & 1u) != 0u)
+        {
+            return false;
+        }
+        if (hexstr.size() != (bin.size() << 1))
         {
             return false;
         }
 
         for (int i = 0, ilen = (int)hexstr.size(); i < ilen; i+=2) {
-            int hi = hexstr[i];
-            int lo = hexstr[i+1];
+            int hi = (unsigned char)hexstr[i];
+            int lo = (unsigned char)hexstr[i+1];
             if ('0' <= hi && hi <= '9')
                 hi -= '0';
             else if ((hi |= 0x20), 'a' <= hi && hi <= 'f')
@@ -491,40 +506,264 @@ namespace minerva
         return false;
     }
 
-    static void set_digest_auth_header(http_context & ctx, const std::string & realm)
+    static void set_digest_auth_header(http_context & ctx,
+                                       const std::string & realm,
+                                       http_auth_nonce_store & store,
+                                       bool stale = false)
     {
-        time_t ts = time(nullptr);
-        
-        // Use OpenSSL's cryptographically secure random number generation
-        unsigned char random_bytes[4];
-        if (RAND_bytes(random_bytes, sizeof(random_bytes)) != 1) {
-            LOG_ERROR("Failed to generate secure random number for nonce");
-            // Fallback to time-based approach, though less secure
-            random_bytes[0] = ts & 0xFF;
-            random_bytes[1] = (ts >> 8) & 0xFF;
-            random_bytes[2] = (ts >> 16) & 0xFF;
-            random_bytes[3] = (ts >> 24) & 0xFF;
+        // Issue ONE nonce that both algorithm challenges share, so we don't
+        // double our nonce-store footprint per challenge.
+        std::string nonce = store.issue(ctx.client_ip(), realm);
+
+        auto build = [&](const char * algo_name) {
+            std::stringstream str;
+            str << DIGEST_HDR;
+            str << " realm=\"" << realm << "\"";
+            str << ", nonce=\"" << nonce << "\"";
+            str << ", qop=\"auth\"";
+            str << ", algorithm=" << algo_name;
+            if (stale)
+            {
+                str << ", stale=true";
+            }
+            return str.str();
+        };
+
+        // Per RFC 7616 §3.7, a server MAY offer multiple algorithm choices
+        // by sending multiple WWW-Authenticate headers; the client picks
+        // the strongest one it supports.  We list SHA-256 first as the
+        // preferred choice.
+        ctx.response().add_header("WWW-Authenticate", build("SHA-256"));
+        ctx.response().add_header("WWW-Authenticate", build("MD5"));
+    }
+
+    // ---- http_auth_nonce_store ------------------------------------------
+
+    http_auth_nonce_store::http_auth_nonce_store()
+    {
+        if (RAND_bytes(m_secret, sizeof(m_secret)) != 1)
+        {
+            // RAND_bytes failure is exceedingly unlikely but is fatal for
+            // authentication security; abort rather than fall back to a
+            // predictable secret.
+            FATAL("RAND_bytes failed when seeding HTTP digest nonce secret");
         }
-        int rnd = *reinterpret_cast<int*>(random_bytes);
+    }
 
-        std::stringstream str;
+    std::string http_auth_nonce_store::compute_mac_hex(
+        const std::string & ts_hex,
+        const std::string & client_ip,
+        const std::string & realm) const
+    {
+        unsigned char mac[EVP_MAX_MD_SIZE];
+        unsigned int mac_len = 0;
 
-        str << DIGEST_HDR;
-        str << " realm=\"" << realm << "\"";
-        str << ", nonce=\"";
-        buffer_append_uint_hex(str, static_cast<unsigned int>(ts));
-        str << ":";
-        digest_nonce_md5(str, ts, static_cast<int>(rnd));
-        str << "\"";
-        str << ", qop=\"auth\"";
+        std::string buf;
+        buf.reserve(ts_hex.size() + client_ip.size() + realm.size() + 2);
+        buf.append(ts_hex);
+        buf.push_back(':');
+        buf.append(client_ip);
+        buf.push_back(':');
+        buf.append(realm);
 
-        ctx.response().add_header("WWW-Authenticate", str.str());
+        if (HMAC(EVP_sha256(), m_secret, sizeof(m_secret),
+                 reinterpret_cast<const unsigned char *>(buf.data()),
+                 buf.size(),
+                 mac, &mac_len) == nullptr || mac_len == 0)
+        {
+            return std::string();
+        }
+
+        char hex[EVP_MAX_MD_SIZE * 2 + 1];
+        tohex(hex, sizeof(hex),
+              reinterpret_cast<const char *>(mac), mac_len);
+        return std::string(hex, mac_len * 2);
+    }
+
+    void http_auth_nonce_store::prune_locked(std::time_t now)
+    {
+        // Drop any state at the front of the FIFO that has expired.
+        while (!m_order.empty())
+        {
+            auto it = m_state.find(m_order.front());
+            if (it == m_state.end())
+            {
+                m_order.pop_front();
+                continue;
+            }
+            if (it->second.second > now)
+            {
+                break;
+            }
+            m_state.erase(it);
+            m_order.pop_front();
+        }
+        // Hard cap: drop oldest until under the limit.
+        while (m_order.size() > m_max_entries)
+        {
+            m_state.erase(m_order.front());
+            m_order.pop_front();
+        }
+    }
+
+    std::string http_auth_nonce_store::issue(const std::string & client_ip,
+                                             const std::string & realm)
+    {
+        std::time_t now = std::time(nullptr);
+
+        std::stringstream ts_ss;
+        buffer_append_uint_hex(ts_ss, static_cast<unsigned int>(now));
+        std::string ts_hex = ts_ss.str();
+
+        std::string mac_hex = compute_mac_hex(ts_hex, client_ip, realm);
+        if (mac_hex.empty())
+        {
+            return std::string();
+        }
+
+        std::string nonce = ts_hex + ":" + mac_hex;
+
+        std::lock_guard<std::mutex> lk(m_lock);
+        prune_locked(now);
+        // Track the nonce with no nc usage yet.
+        if (m_state.emplace(nonce,
+                            std::make_pair(0ul, now + m_max_age)).second)
+        {
+            m_order.push_back(nonce);
+        }
+        return nonce;
+    }
+
+    http_auth_nonce_store::validate_result
+    http_auth_nonce_store::validate(const std::string & nonce,
+                                    const std::string & nc_hex,
+                                    const std::string & client_ip,
+                                    const std::string & realm)
+    {
+        // Split nonce into ts:mac.
+        size_t colon = nonce.find(':');
+        if (colon == std::string::npos ||
+            colon == 0 ||
+            colon == nonce.size() - 1)
+        {
+            return validate_result::INVALID;
+        }
+        std::string ts_hex = nonce.substr(0, colon);
+        std::string mac_hex = nonce.substr(colon + 1);
+
+        // Sanity bounds before crypto.
+        if (ts_hex.size() > 16 || mac_hex.size() != 64)
+        {
+            return validate_result::INVALID;
+        }
+        for (char c : ts_hex)
+        {
+            if (!std::isxdigit(static_cast<unsigned char>(c)))
+            {
+                return validate_result::INVALID;
+            }
+        }
+        for (char c : mac_hex)
+        {
+            if (!std::isxdigit(static_cast<unsigned char>(c)))
+            {
+                return validate_result::INVALID;
+            }
+        }
+
+        // Recompute and constant-time compare.
+        std::string expected_mac = compute_mac_hex(ts_hex, client_ip, realm);
+        if (expected_mac.size() != mac_hex.size() ||
+            !secure_compare_strings(expected_mac, mac_hex))
+        {
+            return validate_result::INVALID;
+        }
+
+        // Parse timestamp and check window.
+        unsigned long long ts_val = 0;
+        try
+        {
+            ts_val = std::stoull(ts_hex, nullptr, 16);
+        }
+        catch (const std::exception &)
+        {
+            return validate_result::INVALID;
+        }
+        std::time_t ts = static_cast<std::time_t>(ts_val);
+        std::time_t now = std::time(nullptr);
+        if (now < ts || (now - ts) > m_max_age)
+        {
+            return validate_result::STALE;
+        }
+
+        // Parse nc if provided.
+        unsigned long nc = 0;
+        bool have_nc = !nc_hex.empty();
+        if (have_nc)
+        {
+            if (nc_hex.size() > 8)
+            {
+                return validate_result::INVALID;
+            }
+            for (char c : nc_hex)
+            {
+                if (!std::isxdigit(static_cast<unsigned char>(c)))
+                {
+                    return validate_result::INVALID;
+                }
+            }
+            try
+            {
+                nc = std::stoul(nc_hex, nullptr, 16);
+            }
+            catch (const std::exception &)
+            {
+                return validate_result::INVALID;
+            }
+            if (nc == 0)
+            {
+                return validate_result::INVALID;
+            }
+        }
+
+        // Replay check.
+        std::lock_guard<std::mutex> lk(m_lock);
+        prune_locked(now);
+
+        auto it = m_state.find(nonce);
+        if (it == m_state.end())
+        {
+            // Not a nonce we issued (or it was pruned). Treat as stale so the
+            // client retries with a fresh challenge transparently.
+            return validate_result::STALE;
+        }
+
+        unsigned long & last_nc = it->second.first;
+        if (have_nc)
+        {
+            if (nc <= last_nc)
+            {
+                return validate_result::REPLAY;
+            }
+            last_nc = nc;
+        }
+        else
+        {
+            // No qop/nc: the nonce may be used only once.
+            if (last_nc != 0)
+            {
+                return validate_result::REPLAY;
+            }
+            last_nc = 1;
+        }
+        return validate_result::OK;
     }
 
     bool authenticate_digest(http_context & ctx,
                              const std::string & authHdr,
-                             const std::string & in_realm, 
+                             const std::string & in_realm,
                              http_auth_db & db,
+                             http_auth_nonce_store & nonce_store,
                              std::string & user)
     {
         std::stringstream ss(authHdr);
@@ -536,7 +775,7 @@ namespace minerva
         if (part != DIGEST_HDR)
         {
             LOG_DEBUG("Not a digest auth header");
-            set_digest_auth_header(ctx, in_realm);
+            set_digest_auth_header(ctx, in_realm, nonce_store);
             return false;
         }
 
@@ -549,7 +788,7 @@ namespace minerva
         if (!parse_digest_keyvalue(digest_params_str, digest_params))
         {
             LOG_WARN("failed to parse digest parameters");
-            set_digest_auth_header(ctx, in_realm);
+            set_digest_auth_header(ctx, in_realm, nonce_store);
             return false;
         }
 
@@ -570,7 +809,7 @@ namespace minerva
         if (!algorithm.empty() && !digest_algorithm_parse(algorithm, algo, algo_len))
         {
             LOG_WARN("unsupported algorithm: " << algorithm);
-            set_digest_auth_header(ctx, in_realm);
+            set_digest_auth_header(ctx, in_realm, nonce_store);
             return false;
         }
 
@@ -582,7 +821,7 @@ namespace minerva
             response.empty())
         {
             LOG_WARN("missing digest field");
-            set_digest_auth_header(ctx, in_realm);
+            set_digest_auth_header(ctx, in_realm, nonce_store);
             return false;
         }
 
@@ -597,7 +836,7 @@ namespace minerva
         if (!found_user)
         {
             LOG_WARN("invalid digest user: " << username);
-            set_digest_auth_header(ctx, in_realm);
+            set_digest_auth_header(ctx, in_realm, nonce_store);
             return false;
         }
 
@@ -610,21 +849,21 @@ namespace minerva
         if (!(algo & ~HTTP_AUTH_DIGEST_SESS))
         {
             LOG_WARN("missing digest algorithm");
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
         if ((algo & HTTP_AUTH_DIGEST_SESS) && (nonce.empty() || cnonce.empty()))
         {
             LOG_WARN("missing digest algorithm field: " << algorithm);
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
         if (realm != entry.realm())
         {
             LOG_WARN("invalid realm: " << realm << " expected: " << entry.realm());
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
@@ -634,54 +873,78 @@ namespace minerva
         if (!digest_hex2bin(response, rdigest))
         {
             LOG_WARN("invalid digest response: " << response);
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
         if (!qop.empty() && qop == "auth-int")
         {
             LOG_WARN("unsupported digest qop: " << qop);
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
         std::vector<char> digest;
+        bool digest_ok = false;
 
         if (algo & HTTP_AUTH_DIGEST_MD5)
         {
-            digest_mutate_md5(algo,
-                              entry.hash(),
-                              ctx.request().method_as_string(),
-                              uri,
-                              nonce,
-                              cnonce,
-                              nc,
-                              qop,
-                              digest);
+            const std::string & user_hash = entry.hash_md5();
+            if (user_hash.empty())
+            {
+                LOG_WARN("user '" << username
+                         << "' has no MD5 credential for digest auth");
+                set_digest_auth_header(ctx, entry.realm(), nonce_store);
+                return false;
+            }
+            digest_ok = digest_mutate_md5(algo,
+                                          user_hash,
+                                          ctx.request().method_as_string(),
+                                          uri,
+                                          nonce,
+                                          cnonce,
+                                          nc,
+                                          qop,
+                                          digest);
         }
         else if (algo & HTTP_AUTH_DIGEST_SHA256)
         {
-            digest_mutate_sha256(algo,
-                                 entry.hash(),
-                                 ctx.request().method_as_string(),
-                                 uri,
-                                 nonce,
-                                 cnonce,
-                                 nc,
-                                 qop,
-                                 digest);
+            const std::string & user_hash = entry.hash_sha256();
+            if (user_hash.empty())
+            {
+                LOG_WARN("user '" << username
+                         << "' has no SHA-256 credential for digest auth");
+                set_digest_auth_header(ctx, entry.realm(), nonce_store);
+                return false;
+            }
+            digest_ok = digest_mutate_sha256(algo,
+                                             user_hash,
+                                             ctx.request().method_as_string(),
+                                             uri,
+                                             nonce,
+                                             cnonce,
+                                             nc,
+                                             qop,
+                                             digest);
         }
         else
         {
             LOG_WARN("unsupported digest algorithm: " << algo);
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
+            return false;
+        }
+
+        if (!digest_ok)
+        {
+            LOG_WARN("digest computation failed for user: " << username);
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
         if (rdigest.size() != digest.size())
         {
             LOG_WARN("invalid digest size: " << rdigest.size());
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
@@ -689,7 +952,32 @@ namespace minerva
         if (!secure_compare(rdigest, digest))
         {
             LOG_WARN("invalid digest password for user: " << username);
-            set_digest_auth_header(ctx, entry.realm());
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
+            return false;
+        }
+
+        // Credentials are valid. Now validate the server-issued nonce and
+        // enforce nonce-count replay protection. Done after the password
+        // check so an attacker cannot probe nonce state without knowing the
+        // password.
+        auto nv = nonce_store.validate(nonce, nc, ctx.client_ip(),
+                                       entry.realm());
+        switch (nv)
+        {
+        case http_auth_nonce_store::validate_result::OK:
+            break;
+        case http_auth_nonce_store::validate_result::STALE:
+            LOG_DEBUG("stale nonce for user: " << username);
+            set_digest_auth_header(ctx, entry.realm(), nonce_store, true);
+            return false;
+        case http_auth_nonce_store::validate_result::REPLAY:
+            LOG_WARN("replayed digest nonce for user: " << username);
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
+            return false;
+        case http_auth_nonce_store::validate_result::INVALID:
+        default:
+            LOG_WARN("invalid digest nonce for user: " << username);
+            set_digest_auth_header(ctx, entry.realm(), nonce_store);
             return false;
         }
 
@@ -733,34 +1021,38 @@ namespace minerva
         if (!from64tobits(part, buf))
         {
             LOG_ERROR("Failed to base64 decode HTTP Basic auth header");
+            secure_zero_string(part);
+            secure_zero_string(buf);
             ctx.response().add_header("WWW-Authenticate", "Basic");
             return false;
         }
-        
+        // base64 source no longer needed
+        secure_zero_string(part);
+
         // look for the separator in the decoded credentials
         auto pos = buf.find(':');
         if (pos == std::string::npos)
         {
             LOG_ERROR("Basic credentials not formatted correctly");
+            secure_zero_string(buf);
             ctx.response().add_header("WWW-Authenticate", "Basic");
             return false;
         }
-        
+
         // extract username and password
         std::string uname(buf.substr(0, pos));
         std::string pwd(buf.substr(pos+1));
-    
+        // decoded "user:pass" no longer needed
+        secure_zero_string(buf);
+
         user = uname;
 
-        std::string hash = 
+        std::string hash =
             digest_hash_md5(uname, realm, pwd);
-        
+
         // Clear sensitive password data from memory
-        if (!pwd.empty()) {
-            volatile char* pwd_ptr = const_cast<volatile char*>(pwd.data());
-            memset(const_cast<char*>(pwd_ptr), 0, pwd.size());
-        }
-        
+        secure_zero_string(pwd);
+
         bool result = false;
         http_auth_user entry;
         if (db.find_user(uname, entry))
@@ -768,17 +1060,14 @@ namespace minerva
             // Use constant-time comparison to prevent timing attacks
             result = secure_compare_strings(hash, entry.hash());
         }
-        
+
         // Clear hash from memory after use
-        if (!hash.empty()) {
-            volatile char* hash_ptr = const_cast<volatile char*>(hash.data());
-            memset(const_cast<char*>(hash_ptr), 0, hash.size());
-        }
-        
+        secure_zero_string(hash);
+
         if (!result) {
             ctx.response().add_header("WWW-Authenticate", "Basic");
         }
-        
+
         return result;
     }
 }

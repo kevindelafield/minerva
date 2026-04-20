@@ -13,7 +13,8 @@
 namespace minerva
 {
 
-    static const char* firstLineRegex = "^(.+)\\s+(.+)\\s+HTTP/(1.0|1.1)\r$";
+    static const char* firstLineRegex = "^(\\S+)\\s+(\\S+)\\s+HTTP/(1\\.0|1\\.1)\r$";
+    static const std::regex kFirstLineRegex(firstLineRegex);
     static const char* headerRegex = "^(.+):\\s+(.+)\r$";
     static const char* contentLength = "content-length";
     static const char* contentType = "content-type";
@@ -29,7 +30,59 @@ namespace minerva
     static const size_t MAX_REQUEST_LINE_SIZE = 4096;    // Maximum request line size
     static const size_t MAX_TOTAL_HEADERS_SIZE = 64*1024; // Maximum total header size (64KB)
 
-    static char tmpBuf[1];
+    // Parse a chunk-size hex string with strict validation and size caps.
+    // Throws http_exception on any error.
+    static size_t parse_chunk_size(const std::string & hex,
+                                   size_t already_read,
+                                   size_t max_total)
+    {
+        if (hex.empty() || hex.size() > 16)
+        {
+            LOG_WARN("invalid chunk header: " << hex);
+            throw http_exception("invalid chunk header");
+        }
+        // strip optional chunk extension after ';'
+        std::string clean = hex;
+        size_t semi = clean.find(';');
+        if (semi != std::string::npos)
+        {
+            clean.resize(semi);
+        }
+        // trim trailing whitespace
+        while (!clean.empty() &&
+               (clean.back() == ' ' || clean.back() == '\t'))
+        {
+            clean.pop_back();
+        }
+        if (clean.empty() ||
+            clean.find_first_not_of("0123456789abcdefABCDEF") !=
+            std::string::npos)
+        {
+            LOG_WARN("invalid chunk header: " << hex);
+            throw http_exception("invalid chunk header");
+        }
+        unsigned long long val = 0;
+        try
+        {
+            val = std::stoull(clean, nullptr, 16);
+        }
+        catch (const std::exception &)
+        {
+            LOG_WARN("invalid chunk header: " << hex);
+            throw http_exception("invalid chunk header");
+        }
+        if (val > http_request::MAX_CHUNK_SIZE)
+        {
+            LOG_WARN("chunk too large: " << val);
+            throw http_exception("chunk too large");
+        }
+        if (val > max_total - already_read)
+        {
+            LOG_WARN("aggregate chunked body exceeds maximum");
+            throw http_exception("chunked body too large");
+        }
+        return static_cast<size_t>(val);
+    }
 
     http_request::http_request(http_context * ctx) :
         m_http11(false), m_method(METHOD::GET),
@@ -84,9 +137,8 @@ namespace minerva
         }
     
         // scan first line
-        std::regex regex(firstLineRegex);
         std::smatch match;
-        std::regex_search(line, match, regex);
+        std::regex_search(line, match, kFirstLineRegex);
         if (match.size() != 4)
         {
             LOG_WARN("Invalid http request header: " << line.c_str());
@@ -97,6 +149,11 @@ namespace minerva
         std::string version = match[3];
 
         // handle the http://host::port prefix possibility
+        if (path.empty())
+        {
+            LOG_WARN("empty request path");
+            return false;
+        }
         if (path[0] != '/')
         {
             auto pos = path.find_first_of("/");
@@ -452,20 +509,9 @@ namespace minerva
                     m_overflow.pop_front();
                     m_overflow.pop_front();
 
-                    // Validate hex characters and parse chunk size
-                    try
-                    {
-                        if (hex.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
-                        {
-                            throw std::invalid_argument("Invalid hex character");
-                        }
-                        m_chunk_size = std::stoul(hex, nullptr, 16);
-                    }
-                    catch (const std::exception & exc)
-                    {
-                        LOG_WARN("invalid chunk header: " << hex);
-                        throw http_exception("invalid chunk header");
-                    }
+                    m_chunk_size = parse_chunk_size(hex,
+                                                    m_total_read,
+                                                    MAX_CONTENT_LENGTH);
                     if (m_chunk_size == 0)
                     {
                         m_chunk_state = CHUNK_STATE::READING_END;
@@ -498,7 +544,7 @@ namespace minerva
                 {
                     size_t to_read = 
                         std::min(m_overflow.size(), 
-                                 static_cast<unsigned long>(m_chunk_size - m_chunk_read));
+                                 m_chunk_size - m_chunk_read);
                     std::copy(m_overflow.begin(), 
                               m_overflow.begin() + to_read,
                               std::ostream_iterator<char>(m_fullbuf));
@@ -516,7 +562,7 @@ namespace minerva
                 char buf[20*1024];
                 size_t to_read = 
                     std::min(sizeof(buf), 
-                             static_cast<unsigned long>(m_chunk_size - m_chunk_read));
+                             m_chunk_size - m_chunk_read);
                 size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                 // read will be > 0
                 std::copy(buf, buf+read,
@@ -651,17 +697,10 @@ namespace minerva
                     }
                     m_overflow.pop_front();
                     m_overflow.pop_front();
-                    
-                    // Use std::stoul directly instead of stringstream
-                    try
-                    {
-                        m_chunk_size = std::stoul(hex, nullptr, 16);
-                    }
-                    catch (std::exception & exc)
-                    {
-                        LOG_WARN("invalid chunk header: " << hex);
-                        throw http_exception("invalid chunk header");
-                    }
+
+                    m_chunk_size = parse_chunk_size(hex,
+                                                    m_total_read,
+                                                    MAX_CONTENT_LENGTH);
                     if (m_chunk_size == 0)
                     {
                         m_chunk_state = CHUNK_STATE::READING_END;
@@ -695,7 +734,7 @@ namespace minerva
                 {
                     size_t to_read = 
                         std::min(m_overflow.size(), 
-                                 static_cast<unsigned long>(m_chunk_size - m_chunk_read));
+                                 m_chunk_size - m_chunk_read);
                     std::copy(m_overflow.begin(), 
                               m_overflow.begin() + to_read,
                               std::back_inserter(buffer));
@@ -713,7 +752,7 @@ namespace minerva
                 char buf[20*1024];
                 size_t to_read = 
                     std::min(sizeof(buf), 
-                             static_cast<unsigned long>(m_chunk_size - m_chunk_read));
+                             m_chunk_size - m_chunk_read);
                 size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                 // read will be > 0
                 std::copy(buf, buf+read,
@@ -921,17 +960,10 @@ namespace minerva
                     }
                     m_overflow.pop_front();
                     m_overflow.pop_front();
-                    
-                    // Use std::stoul directly instead of stringstream
-                    try
-                    {
-                        m_chunk_size = std::stoul(hex, nullptr, 16);
-                    }
-                    catch (std::exception & exc)
-                    {
-                        LOG_WARN("invalid chunk header: " << hex);
-                        throw http_exception("invalid chunk header");
-                    }
+
+                    m_chunk_size = parse_chunk_size(hex,
+                                                    m_total_read,
+                                                    MAX_CONTENT_LENGTH);
                     if (m_chunk_size == 0)
                     {
                         m_chunk_state = CHUNK_STATE::READING_END;
@@ -964,9 +996,9 @@ namespace minerva
                 {
                     auto it = m_overflow.cbegin();
                     size_t to_copy = 
-                        std::min(static_cast<unsigned long>(m_chunk_size - m_chunk_read), 
+                        std::min(m_chunk_size - m_chunk_read, 
                                  std::min(len, m_overflow.size()));
-                    for (int i=0; i<to_copy; i++, it++)
+                    for (size_t i=0; i<to_copy; i++, it++)
                     {
                         buf[i] = *it;
                     }
@@ -990,7 +1022,7 @@ namespace minerva
 
                 size_t to_read = 
                     std::min(len, 
-                             static_cast<unsigned long>(m_chunk_size - m_chunk_read));
+                             m_chunk_size - m_chunk_read);
                 size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                 m_chunk_read += read;
                 m_total_read += read;
@@ -1153,17 +1185,10 @@ namespace minerva
                         }
                         m_overflow.pop_front();
                         m_overflow.pop_front();
-                        
-                        // Use std::stoul directly instead of stringstream
-                        try
-                        {
-                            m_chunk_size = std::stoul(hex, nullptr, 16);
-                        }
-                        catch (std::exception & exc)
-                        {
-                            LOG_WARN("invalid chunk header: " << hex);
-                            throw http_exception("invalid chunk header");
-                        }
+
+                        m_chunk_size = parse_chunk_size(hex,
+                                                        m_total_read,
+                                                        MAX_CONTENT_LENGTH);
                         if (m_chunk_size == 0)
                         {
                             m_chunk_state = CHUNK_STATE::READING_END;
@@ -1196,7 +1221,7 @@ namespace minerva
                     {
                         size_t to_erase = 
                             std::min(m_overflow.size(), 
-                                     static_cast<unsigned long>(m_chunk_size - m_chunk_read));
+                                     m_chunk_size - m_chunk_read);
                         m_overflow.erase(m_overflow.begin(), 
                                          m_overflow.begin() + to_erase);
                         m_total_read += to_erase;
@@ -1213,7 +1238,7 @@ namespace minerva
 
                     size_t to_read = 
                         std::min(sizeof(buf), 
-                                 static_cast<unsigned long>(m_chunk_size - m_chunk_read));
+                                 m_chunk_size - m_chunk_read);
                     size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                     m_chunk_read += read;
                     m_total_read += read;

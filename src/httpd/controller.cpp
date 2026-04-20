@@ -9,6 +9,35 @@
 namespace minerva
 {
 
+    // Reject obvious path traversal attempts. Callers that accept user-supplied
+    // path components should additionally canonicalize and verify the result
+    // is within an allowed base directory.
+    static bool is_unsafe_filename(const std::string & filename)
+    {
+        if (filename.empty())
+        {
+            return true;
+        }
+        if (filename.find('\0') != std::string::npos)
+        {
+            return true;
+        }
+        // Reject path traversal segments ".." but allow filenames like "foo..bar"
+        size_t pos = 0;
+        while (pos < filename.size())
+        {
+            size_t end = filename.find('/', pos);
+            if (end == std::string::npos) end = filename.size();
+            std::string seg = filename.substr(pos, end - pos);
+            if (seg == "..")
+            {
+                return true;
+            }
+            pos = end + 1;
+        }
+        return false;
+    }
+
     void controller::handle_request(http_context & ctx,
                                     const std::string & operation)
     {
@@ -54,8 +83,8 @@ namespace minerva
                                   http_context & ctx)
     {
         // Validate filename for security
-        if (filename.find("..") != std::string::npos) {
-            LOG_ERROR("Invalid filename contains path traversal: " << filename);
+        if (is_unsafe_filename(filename)) {
+            LOG_ERROR("Invalid or unsafe filename: " << filename);
             ctx.response().status_code_bad_request();
             return false;
         }
@@ -162,8 +191,8 @@ namespace minerva
                                http_context & ctx)
     {
         // Validate filename for security  
-        if (filename.find("..") != std::string::npos) {
-            LOG_ERROR("Invalid filename contains path traversal: " << filename);
+        if (is_unsafe_filename(filename)) {
+            LOG_ERROR("Invalid or unsafe filename: " << filename);
             ctx.response().status_code_not_found(); // Don't reveal path traversal attempt
             return false;
         }

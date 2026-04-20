@@ -73,6 +73,18 @@ namespace minerva
         m_default_controller = controller;
     }
 
+    controller * httpd::get_default_controller()
+    {
+        std::unique_lock<std::mutex> lk(lock);
+        return m_default_controller;
+    }
+
+    http_auth_db * httpd::get_auth_db()
+    {
+        std::unique_lock<std::mutex> lk(lock);
+        return m_auth_db;
+    }
+
     void httpd::clear_listeners()
     {
         std::unique_lock<std::mutex> lk(m_listener_lock);
@@ -103,7 +115,7 @@ namespace minerva
 
     void httpd::start_listeners()
     {
-        for (auto listener : m_listener_sockets)
+        for (auto & listener : m_listener_sockets)
         {
             listener.second.conn->shutdown_write();
             listener.second.conn->shutdown_read();
@@ -168,29 +180,74 @@ namespace minerva
         start_listeners();
     }
 
+    void httpd::stop()
+    {
+        // Wake any thread waiting on hup so it observes shutdown.
+        {
+            std::unique_lock<std::mutex> lk(m_listener_lock);
+            m_hup = false;
+            m_listener_cond.notify_all();
+        }
+
+        // Close listener fds so the listener thread's poll/accept returns
+        // immediately rather than waiting for the polling period to elapse.
+        // Note: the connection objects themselves remain owned by
+        // m_listener_sockets and will be released in release(); we only need
+        // to half-close the descriptors here so the kernel signals POLLHUP /
+        // returns ECONNABORTED on accept().
+        {
+            std::unique_lock<std::mutex> lk(m_listener_lock);
+            for (auto & listener : m_listener_sockets)
+            {
+                listener.second.conn->shutdown_write();
+                listener.second.conn->shutdown_read();
+            }
+        }
+
+        // Wake persist thread (it sleeps on `cond` when m_socket_map is
+        // empty).  component::stop() already notifies cond + the visor's
+        // shutdown condvar; do it explicitly here too so this method is
+        // safe to call directly.
+        {
+            std::unique_lock<std::mutex> lk(lock);
+            cond.notify_all();
+        }
+
+        component::stop();
+    }
+
     void httpd::release()
     {
-        // close listeners
-        for (auto listener : m_listener_sockets)
+        // At this point the component_visor has joined all threads added via
+        // add_thread() (listener_thread_fn, persist_thread_fn) AND has
+        // waited on the handler thread pool, so no other thread is touching
+        // m_listener_sockets or m_socket_map.  We still take the locks for
+        // defense in depth in case the shutdown ordering ever changes.
         {
-            listener.second.conn->shutdown_write();
-            listener.second.conn->shutdown_read();
-            // Smart pointer automatically cleans up
+            std::unique_lock<std::mutex> lk(m_listener_lock);
+            for (auto & listener : m_listener_sockets)
+            {
+                listener.second.conn->shutdown_write();
+                listener.second.conn->shutdown_read();
+                // Smart pointer automatically cleans up
+            }
+            m_listener_sockets.clear();
         }
-        m_listener_sockets.clear();
 
-        // close open sockets
-        for (auto it = m_socket_map.begin();
-             it != m_socket_map.end();
-             it++)
         {
-            auto conn = std::get<0>(it->second);
-            conn->shutdown();
-            conn->shutdown_write();
-            conn->shutdown_read();
-            // Smart pointer automatically cleans up
+            std::unique_lock<std::mutex> lk(lock);
+            for (auto it = m_socket_map.begin();
+                 it != m_socket_map.end();
+                 it++)
+            {
+                auto conn = std::get<0>(it->second);
+                conn->shutdown();
+                conn->shutdown_write();
+                conn->shutdown_read();
+                // Smart pointer automatically cleans up
+            }
+            m_socket_map.clear();
         }
-        m_socket_map.clear();
 
         component::release();
     }
@@ -212,12 +269,14 @@ namespace minerva
 
         m_listener_cond.notify_all();
 
-        if (!m_auth_db->initialize())
+        if (auto * db = get_auth_db())
         {
-            LOG_ERROR("failed to reload HTTPD auth db");
+            if (!db->initialize())
+            {
+                LOG_ERROR("failed to reload HTTPD auth db");
+            }
         }
     }
-
     void httpd::shutdown_write_async(std::shared_ptr<connection> conn)
     {
         schedule_job([this, conn]()
@@ -291,9 +350,17 @@ namespace minerva
     {
         while (!should_shutdown())
         {
-            std::map<int, std::tuple<std::shared_ptr<connection>, struct sockaddr_in, socklen_t>> map;
+            // Local snapshot of the map keyed by connection identity.  We
+            // also build a parallel fd->connection lookup so the poll loop
+            // can route revents back to the right entry without trusting
+            // the (potentially recycled) fd value.
+            std::map<connection *,
+                     std::tuple<std::shared_ptr<connection>,
+                                struct sockaddr_storage,
+                                socklen_t>> map;
             std::vector<connection::shared_poll_fd> fds;
             std::vector<std::shared_ptr<connection>> to_close;
+            std::map<int, connection *> fd_to_conn;
             
             // wait for sockets or a shutdown
             {
@@ -309,7 +376,7 @@ namespace minerva
 
                 // timeout anything older than 90 seconds
 
-                std::vector<int> to_erase;
+                std::vector<connection *> to_erase;
 
                 for (auto it = m_socket_map.begin();
                      it != m_socket_map.end();
@@ -329,22 +396,29 @@ namespace minerva
                     }
                 }
 
-                for (auto s : to_erase)
+                for (auto * key : to_erase)
                 {
-                    m_socket_map.erase(s);
+                    m_socket_map.erase(key);
                 }
 
                 map = m_socket_map;
             }
 
-            std::for_each(map.begin(), map.end(),
-                          [&fds](std::pair<int, std::tuple<std::shared_ptr<connection>, struct sockaddr_in, socklen_t>> item)
-                          {
-                              fds.push_back(connection::shared_poll_fd(item.first,
-                                                                       true,
-                                                                       false,
-                                                                       true));
-                          });
+            for (auto & item : map)
+            {
+                int fd = item.first->get_socket();
+                if (fd < 0)
+                {
+                    continue;
+                }
+                fd_to_conn[fd] = item.first;
+                fds.push_back(connection::shared_poll_fd(fd, true,
+                                                         false, true));
+            }
+            if (fds.empty())
+            {
+                continue;
+            }
 
             int err;
             int status = connection::poll(fds, 10, err);
@@ -369,22 +443,29 @@ namespace minerva
                 // handle any poll notices
                 for (auto & it : fds)
                 {
+                    auto fd_it = fd_to_conn.find(it.socket);
+                    if (fd_it == fd_to_conn.end())
+                    {
+                        continue;
+                    }
+                    connection * key = fd_it->second;
+                    auto map_it = map.find(key);
+                    if (map_it == map.end())
+                    {
+                        continue;
+                    }
+
                     if (it.error)
                     {
-                        auto c = map[it.socket];
-                        
-                        to_close.push_back(std::get<0>(c));
-                        
-                        m_socket_map.erase(std::get<0>(c)->get_socket());
-                        
+                        to_close.push_back(std::get<0>(map_it->second));
+                        m_socket_map.erase(key);
                     }
                     else if (it.read)
                     {
-                        auto to_send = map[it.socket];
-                        
+                        auto to_send = map_it->second;
                         auto socket = std::get<0>(to_send);
 
-                        m_socket_map.erase(socket->get_socket());
+                        m_socket_map.erase(key);
                         
                         bool available;
                         bool success = 
@@ -396,7 +477,7 @@ namespace minerva
                                       socket->get_socket());
                         
                             handler_thread_pool->queue_work_item([this, to_send] () {
-                                    struct sockaddr_in addr = std::get<1>(to_send);
+                                    struct sockaddr_storage addr = std::get<1>(to_send);
                                     
                                     this->handle_request(std::get<0>(to_send),
                                                          addr,
@@ -425,13 +506,13 @@ namespace minerva
     }
     
     void httpd::put_back_connection(std::shared_ptr<connection> conn,
-                                    const sockaddr_in & addr, 
+                                    const sockaddr_storage & addr, 
                                     socklen_t addr_len)
     {
         LOG_DEBUG("put back: " << conn->get_socket());
 
         std::unique_lock<std::mutex> lk(lock);
-        m_socket_map[conn->get_socket()] = 
+        m_socket_map[conn.get()] = 
             std::make_tuple(conn, addr, addr_len);
         cond.notify_all();
     }
@@ -502,7 +583,8 @@ namespace minerva
                     m_listener_sockets[it.socket].protocol ==
                     PROTOCOL::HTTP;
 
-                struct sockaddr_in addr;
+                struct sockaddr_storage addr;
+                memset(&addr, 0, sizeof(addr));
                 socklen_t addr_len = sizeof(addr);
 
                 int s;
@@ -620,7 +702,8 @@ namespace minerva
 
     bool httpd::authenticate(http_context & ctx, std::string & user)
     {
-        if (!m_auth_db)
+        http_auth_db * auth_db = get_auth_db();
+        if (!auth_db)
         {
             return true;
         }
@@ -633,8 +716,8 @@ namespace minerva
         bool success =
             authenticate_basic(ctx,
                                auth_header,
-                               m_auth_db->realm(),
-                               *m_auth_db,
+                               auth_db->realm(),
+                               *auth_db,
                                user);
 
         // digest header check
@@ -643,8 +726,9 @@ namespace minerva
             success = 
                 authenticate_digest(ctx,
                                     auth_header,
-                                    m_auth_db->realm(),
-                                    *m_auth_db,
+                                    auth_db->realm(),
+                                    *auth_db,
+                                    m_nonce_store,
                                     user);
         }
         
@@ -663,7 +747,7 @@ namespace minerva
     constexpr static size_t BUFFER_SIZE = 100*1024;
 
     void httpd::handle_request(std::shared_ptr<connection> conn,
-                               const struct sockaddr_in & addr, 
+                               const struct sockaddr_storage & addr, 
                                socklen_t addr_len)
     {
         LOG_DEBUG("Handling http request");
@@ -671,7 +755,20 @@ namespace minerva
         m_active_count++;
 
         std::string client_ip;
-        char * name = ::inet_ntoa(addr.sin_addr);
+        char ip_buf[INET6_ADDRSTRLEN] = {0};
+        const char * name = nullptr;
+        if (addr.ss_family == AF_INET)
+        {
+            const auto * a = reinterpret_cast<const sockaddr_in *>(&addr);
+            name = ::inet_ntop(AF_INET, &a->sin_addr,
+                               ip_buf, sizeof(ip_buf));
+        }
+        else if (addr.ss_family == AF_INET6)
+        {
+            const auto * a = reinterpret_cast<const sockaddr_in6 *>(&addr);
+            name = ::inet_ntop(AF_INET6, &a->sin6_addr,
+                               ip_buf, sizeof(ip_buf));
+        }
         if (name)
         {
             client_ip = name;
@@ -700,8 +797,9 @@ namespace minerva
             
             char tmp_date[200];
             
-            strftime(tmp_date, 199, "%a, %b %d %Y %H:%M:%S GMT", &tm);
-            tmp_date[199] = 0;
+            strftime(tmp_date, sizeof(tmp_date),
+                     "%a, %d %b %Y %H:%M:%S GMT", &tm);
+            tmp_date[sizeof(tmp_date) - 1] = 0;
 
             date = tmp_date;
 
@@ -837,18 +935,17 @@ namespace minerva
                     break;
                 }
 
-                // Process received data
-                buf.push_back(0);
-                first = std::strstr(&buf[0], "\r\n\r\n");
-                buf.pop_back();
-                if (nullptr == first)
+                // Length-aware search for end-of-headers (NUL-safe)
+                static const char eoh[4] = { '\r', '\n', '\r', '\n' };
+                auto eoh_it = std::search(buf.begin(), buf.end(),
+                                          eoh, eoh + 4);
+                if (eoh_it == buf.end())
                 {
                     // Still haven't received headers
                     continue;
                 }
-                first = first + 4; // Skip past headers to body
-
-                size_t header_length = first - &buf[0];
+                size_t header_length = (eoh_it - buf.begin()) + 4;
+                first = &buf[0] + header_length;
 
                 LOG_DEBUG("Found http request header");
 
@@ -893,7 +990,7 @@ namespace minerva
             // no controller found - try default controller
             if (!controller)
             {
-                controller = m_default_controller;
+                controller = get_default_controller();
             }
 
             if (!controller)

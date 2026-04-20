@@ -2,6 +2,7 @@
 
 #include <string>
 #include <mutex>
+#include <atomic>
 #include <map>
 #include <httpd/http_auth.h>
 
@@ -33,10 +34,11 @@ namespace minerva
 
     private:
         std::map<std::string, minerva::http_auth_user> m_user_map;
-        std::mutex m_lock;
-        bool m_initialized = false;
+        mutable std::mutex m_lock;
+        std::atomic<bool> m_initialized{false};
         std::string m_webpass;
 
-        bool write_map() const;
+        // Caller must hold m_lock.
+        bool write_map_locked() const;
     };
 }

@@ -3,6 +3,8 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <util/time_utils.h>
 #include <optional>
 #include <util/connection.h>
@@ -19,7 +21,8 @@ namespace minerva
         : m_request(this), m_response(this), m_conn(conn), m_timer(),
           m_sd_cb(sdCb)
             {
-                std::memset(&m_client_addr_len, 0, sizeof(m_client_addr_len));
+                std::memset(&m_client_addr, 0, sizeof(m_client_addr));
+                m_client_addr_len = 0;
             }
 
         ~http_context() = default;
@@ -29,7 +32,7 @@ namespace minerva
             return m_post_command;
         }
 
-        void client_addr(const struct sockaddr_in & addr,
+        void client_addr(const struct sockaddr_storage & addr,
                          socklen_t addr_len)
         {
             m_client_addr = addr;
@@ -110,7 +113,7 @@ namespace minerva
         std::shared_ptr<connection> m_conn;
         std::string m_username;
         std::string m_client_ip;
-        struct sockaddr_in m_client_addr;
+        struct sockaddr_storage m_client_addr;
         socklen_t m_client_addr_len;
         int m_timeout_msecs = DEFAULT_TIMEOUT;
         minerva::timer m_timer;

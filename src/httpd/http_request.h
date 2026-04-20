@@ -32,9 +32,10 @@ namespace minerva
                 PUT
                 };
     
-        const size_t MAX_CONTENT_LENGTH = 10 * 1024 * 1024; // Reduced from 120MB to 10MB
-        const size_t MAX_HEADER_SIZE = 8 * 1024;            // Maximum size for individual headers
-        const size_t MAX_HEADERS_COUNT = 100;               // Maximum number of headers
+        static constexpr size_t MAX_CONTENT_LENGTH = 10 * 1024 * 1024; // Reduced from 120MB to 10MB
+        static constexpr size_t MAX_HEADER_SIZE = 8 * 1024;            // Maximum size for individual headers
+        static constexpr size_t MAX_HEADERS_COUNT = 100;               // Maximum number of headers
+        static constexpr size_t MAX_CHUNK_SIZE = 16 * 1024 * 1024;     // 16MB max single chunk
 
         http_request(http_context * ctx);
         ~http_request() = default;
@@ -174,8 +175,8 @@ namespace minerva
         };
 
         CHUNK_STATE m_chunk_state = CHUNK_STATE::READING_CHUNK_HEADER;
-        int m_chunk_size = 0;
-        int m_chunk_read = 0;
+        size_t m_chunk_size = 0;
+        size_t m_chunk_read = 0;
 
         friend class httpd;
 
@@ -204,7 +205,7 @@ namespace minerva
         bool m_full_read = false;
         bool m_partial_read = false;
         size_t m_total_read = 0;
-        size_t m_offset;
+        size_t m_offset = 0;
         std::map<std::string, std::string, minerva::ci_less> m_headers;
         METHOD m_method;
         bool m_http11;

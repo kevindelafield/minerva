@@ -1,6 +1,7 @@
 #pragma once
 
 #include <exception>
+#include <string>
 
 namespace minerva
 {
@@ -8,20 +9,24 @@ namespace minerva
     class http_exception : public std::exception
     {
     public:
-        
-        http_exception(const char* what) : _what(what)
+
+        explicit http_exception(const char* what) : _what(what ? what : "")
         {
         }
-        
-        virtual const char* what() const throw()
+
+        explicit http_exception(std::string what) : _what(std::move(what))
         {
-            return _what;
         }
-        
+
+        virtual const char* what() const noexcept override
+        {
+            return _what.c_str();
+        }
+
     private:
-        
-        const char * _what;
-        
+
+        std::string _what;
+
     };
 }
 
