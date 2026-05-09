@@ -84,10 +84,7 @@ namespace minerva
         return static_cast<size_t>(val);
     }
 
-    http_request::http_request(http_context * ctx) :
-        m_http11(false), m_method(METHOD::GET),
-        m_content_length(0),
-        m_content_type(http_content_type::code::CONTENT_TYPE_UNKNOWN),
+    http_request::http_request(http_context & ctx) :
         m_ctx(ctx)
     {
     }
@@ -361,7 +358,7 @@ namespace minerva
                                  value.c_str());
                         return false;
                     }
-                    if (m_content_length > MAX_CONTENT_LENGTH)
+                    if (m_content_length > static_cast<long long>(m_max_content_length))
                     {
                         LOG_WARN("Content length exceeds maximum: " <<
                                  m_content_length);
@@ -451,8 +448,12 @@ namespace minerva
 
     std::istream & http_request::read_fully_cl(int timeoutMs)
     {
+        if (!m_fullbuf)
+        {
+            m_fullbuf.emplace();
+        }
         std::copy(m_overflow.begin(), m_overflow.end(),
-                  std::ostream_iterator<char>(m_fullbuf));
+                  std::ostream_iterator<char>(*m_fullbuf));
 
         m_total_read = m_overflow.size();
 
@@ -467,15 +468,19 @@ namespace minerva
             char buf[10*1024];
             size_t to_read = std::min(sizeof(buf), left);
             size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
-            m_fullbuf.write(buf, read);
+            m_fullbuf->write(buf, read);
             left -= read;
             m_total_read += read;
         }
-        return m_fullbuf;
+        return *m_fullbuf;
     }
 
     std::istream & http_request::read_fully_chunked(int timeoutMs)
     {
+        if (!m_fullbuf)
+        {
+            m_fullbuf.emplace();
+        }
         minerva::timer _timer;
 
         while (m_chunk_state != CHUNK_STATE::DONE)
@@ -511,7 +516,7 @@ namespace minerva
 
                     m_chunk_size = parse_chunk_size(hex,
                                                     m_total_read,
-                                                    MAX_CONTENT_LENGTH);
+                                                    m_max_content_length);
                     if (m_chunk_size == 0)
                     {
                         m_chunk_state = CHUNK_STATE::READING_END;
@@ -547,7 +552,7 @@ namespace minerva
                                  m_chunk_size - m_chunk_read);
                     std::copy(m_overflow.begin(), 
                               m_overflow.begin() + to_read,
-                              std::ostream_iterator<char>(m_fullbuf));
+                              std::ostream_iterator<char>(*m_fullbuf));
                     m_overflow.erase(m_overflow.begin(),
                                      m_overflow.begin() + to_read);
                     m_chunk_read += to_read;
@@ -566,7 +571,7 @@ namespace minerva
                 size_t read = read_from_socket(buf, to_read, _timer, timeoutMs);
                 // read will be > 0
                 std::copy(buf, buf+read,
-                          std::ostream_iterator<char>(m_fullbuf));
+                          std::ostream_iterator<char>(*m_fullbuf));
                 m_chunk_read += read;
 
                 if (m_chunk_read == m_chunk_size)
@@ -643,7 +648,7 @@ namespace minerva
                 break;
             }
         }
-        return m_fullbuf;
+        return *m_fullbuf;
     }
 
     void http_request::read_chunk(std::vector<char> & buffer, int timeoutMs)
@@ -700,7 +705,7 @@ namespace minerva
 
                     m_chunk_size = parse_chunk_size(hex,
                                                     m_total_read,
-                                                    MAX_CONTENT_LENGTH);
+                                                    m_max_content_length);
                     if (m_chunk_size == 0)
                     {
                         m_chunk_state = CHUNK_STATE::READING_END;
@@ -869,7 +874,7 @@ namespace minerva
         bool write_flag = false;
         bool error_flag = true;
         int poll_status = 
-            m_ctx->conn()->poll(read_flag, write_flag, error_flag, 0);
+            m_ctx.conn()->poll(read_flag, write_flag, error_flag, 0);
         if (poll_status < 0)
         {
             LOG_WARN_ERRNO("Poll error", errno);
@@ -963,7 +968,7 @@ namespace minerva
 
                     m_chunk_size = parse_chunk_size(hex,
                                                     m_total_read,
-                                                    MAX_CONTENT_LENGTH);
+                                                    m_max_content_length);
                     if (m_chunk_size == 0)
                     {
                         m_chunk_state = CHUNK_STATE::READING_END;
@@ -1188,7 +1193,7 @@ namespace minerva
 
                         m_chunk_size = parse_chunk_size(hex,
                                                         m_total_read,
-                                                        MAX_CONTENT_LENGTH);
+                                                        m_max_content_length);
                         if (m_chunk_size == 0)
                         {
                             m_chunk_state = CHUNK_STATE::READING_END;
@@ -1348,12 +1353,12 @@ namespace minerva
             bool done = false;
             do
             {
-                if (m_ctx->should_shutdown())
+                if (m_ctx.should_shutdown())
                 {
                     throw http_exception("server shutdown");
                 }
         
-                if (m_ctx->timed_out())
+                if (m_ctx.timed_out())
                 {
                     throw http_exception("operation timeout");
                 }
@@ -1369,7 +1374,7 @@ namespace minerva
                 bool write_flag = !reading;
                 bool error_flag = true;
                 int poll_status = 
-                    m_ctx->conn()->poll(read_flag, write_flag, error_flag, 100);
+                    m_ctx.conn()->poll(read_flag, write_flag, error_flag, 100);
                 if (poll_status < 0)
                 {
                     LOG_WARN_ERRNO("Poll error", errno);
@@ -1396,7 +1401,7 @@ namespace minerva
             ssize_t read;
     
             auto status = 
-                m_ctx->conn()->read(buf, len, read);
+                m_ctx.conn()->read(buf, len, read);
             switch (status)
             {
             case minerva::connection::CONNECTION_ERROR:

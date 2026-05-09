@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <istream>
 #include <mutex>
+#include <shared_mutex>
 #include <set>
 #include <atomic>
 #include <ostream>
@@ -65,6 +66,8 @@ namespace minerva
 
         void register_default_controller(controller * controller);
         
+        // Caller retains ownership of `db`; it must outlive this httpd
+        // instance. Pass nullptr to disable auth.
         void auth_db(http_auth_db * db)
         {
             std::unique_lock<std::mutex> lk(lock);
@@ -77,34 +80,14 @@ namespace minerva
         class http_listener
         {
         public:
-            http_listener()
-            {
-            }
+            http_listener() = default;
 
             http_listener(int p, PROTOCOL proto) : port(p), protocol(proto)
             {
             }
 
-            http_listener(const http_listener & other)
-            {
-                protocol = other.protocol;
-                port = other.port;
-                conn = other.conn;
-            }
-
-            http_listener & operator=(const http_listener & other)
-            {
-                if (&other != this)
-                {
-                    protocol = other.protocol;
-                    port = other.port;
-                    conn = other.conn;
-                }
-                return *this;
-            }
-
-            PROTOCOL protocol = PROTOCOL::HTTP;
-            int port = 80;
+            PROTOCOL                    protocol = PROTOCOL::HTTP;
+            int                         port     = 80;
             std::shared_ptr<connection> conn;
         };
 
@@ -112,9 +95,14 @@ namespace minerva
 
         thread_pool * handler_thread_pool;
         std::unordered_map<std::string, controller*> controller_map;
+        // Guards controller_map and m_default_controller. controller_map is
+        // populated only at initialization; the dispatch path takes a
+        // shared_lock while callbacks hold the unique_lock.
+        std::shared_mutex m_controller_lock;
         controller* m_default_controller = nullptr;
         std::atomic<unsigned long long> m_active_count;
         std::atomic<unsigned long long> m_request_count;
+        // Non-owning. Owned by the caller of auth_db().
         http_auth_db * m_auth_db = nullptr;
         http_auth_nonce_store m_nonce_store;
 
@@ -132,11 +120,10 @@ namespace minerva
         std::deque<std::string> m_cgi_log;
     
         // Map of currently-idle keep-alive connections, keyed by the
-        // connection's identity (raw pointer of the shared_ptr) rather than
-        // the file descriptor.  This avoids races where the kernel reuses
-        // a closed fd for a freshly-accepted connection while the old entry
-        // is still being drained.
-        std::map<connection *,
+        // owning shared_ptr. Using shared_ptr (rather than a raw pointer
+        // or fd) keeps the connection alive while the entry is in the
+        // map and avoids fd-recycle races.
+        std::map<std::shared_ptr<connection>,
                  std::tuple<std::shared_ptr<connection>,
                             struct sockaddr_storage,
                             socklen_t>> m_socket_map;
@@ -161,6 +148,12 @@ namespace minerva
                             const struct sockaddr_storage & addr, 
                             socklen_t addr_len);
     
+        // Set ctx.response() status to `code`, draining the request body
+        // if necessary. Returns false if the body could not be drained
+        // (caller should set abrt = true).
+        bool finalize_error_response(http_context & ctx,
+                                     http_response::http_response_code code);
+
         bool write_100_continue_header(http_context & ctx);
 
         bool authenticate(http_context & ctx, std::string & user);

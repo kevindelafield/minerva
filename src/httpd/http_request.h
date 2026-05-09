@@ -8,6 +8,7 @@
 #include <istream>
 #include <streambuf>
 #include <deque>
+#include <optional>
 #include <util/string_utils.h>
 #include <util/time_utils.h>
 #include "http_content_type.h"
@@ -37,8 +38,26 @@ namespace minerva
         static constexpr size_t MAX_HEADERS_COUNT = 100;               // Maximum number of headers
         static constexpr size_t MAX_CHUNK_SIZE = 16 * 1024 * 1024;     // 16MB max single chunk
 
-        http_request(http_context * ctx);
+        // Per-request override for the maximum body size, in bytes.
+        // The default is MAX_CONTENT_LENGTH. The override applies only
+        // to this request and is not persisted between requests on a
+        // keep-alive connection.
+        //
+        // For Content-Length-framed requests, this must be set before
+        // parse_header() runs (i.e. before httpd dispatches to a
+        // controller); otherwise parse_header() will reject the request
+        // against the default cap. For chunked requests, controllers may
+        // raise the cap any time before reading the body.
+        void max_content_length(size_t bytes) { m_max_content_length = bytes; }
+        size_t max_content_length() const { return m_max_content_length; }
+
+        http_request(http_context & ctx);
         ~http_request() = default;
+
+        http_request(const http_request &)             = delete;
+        http_request & operator=(const http_request &) = delete;
+        http_request(http_request &&)                  = delete;
+        http_request & operator=(http_request &&)      = delete;
 
         bool parse_header(const std::vector<char> & buf,
                           size_t offset);
@@ -138,7 +157,7 @@ namespace minerva
             }
         }
 
-        bool is_http11()
+        bool is_http11() const
         {
             return m_http11;
         }
@@ -149,7 +168,7 @@ namespace minerva
 
         void read_chunk(std::vector<char> & buf, int timeoutMs = 0);
 
-        http_content_type::code content_type()
+        http_content_type::code content_type() const
         {
             return m_content_type;
         }
@@ -201,23 +220,24 @@ namespace minerva
                                 minerva::timer & timer,
                                 int timeoutMs);
 
-        bool m_chunked = false;
-        bool m_full_read = false;
-        bool m_partial_read = false;
-        size_t m_total_read = 0;
-        size_t m_offset = 0;
+        bool                                                 m_chunked       = false;
+        bool                                                 m_full_read     = false;
+        bool                                                 m_partial_read  = false;
+        size_t                                               m_total_read    = 0;
+        size_t                                               m_offset        = 0;
         std::map<std::string, std::string, minerva::ci_less> m_headers;
-        METHOD m_method;
-        bool m_http11;
-        long long m_content_length;
-        std::string m_path;
+        METHOD                                               m_method        {METHOD::GET};
+        bool                                                 m_http11        {false};
+        long long                                            m_content_length{0};
+        std::string                                          m_path;
         std::map<std::string, std::string, minerva::ci_less> m_query_params;
-        http_content_type::code m_content_type;
-        std::string m_query_string;
-        http_context * m_ctx;
-        std::deque<char> m_overflow;
-        std::stringstream m_fullbuf;
-        bool m_keep_alive = true;
-        bool m_continue_100 = false;
+        http_content_type::code                              m_content_type  {http_content_type::code::CONTENT_TYPE_UNKNOWN};
+        std::string                                          m_query_string;
+        http_context &                                       m_ctx;
+        std::deque<char>                                     m_overflow;
+        std::optional<std::stringstream>                     m_fullbuf;
+        bool                                                 m_keep_alive    = true;
+        bool                                                 m_continue_100  = false;
+        size_t                                               m_max_content_length{MAX_CONTENT_LENGTH};
     };
 }
