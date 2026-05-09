@@ -3,33 +3,56 @@
 #include <fstream>
 #include <cstdio>
 #include <util/string_utils.h>
+#include <util/safe_ofstream.h>
 #include "controller.h"
 #include "http_context.h"
 
 namespace minerva
 {
+    // 100 MiB default cap. Override via controller::max_send_file_size().
+    size_t controller::s_max_send_file_size = 100 * 1024 * 1024;
 
-    // Reject obvious path traversal attempts. Callers that accept user-supplied
-    // path components should additionally canonicalize and verify the result
-    // is within an allowed base directory.
+    // Threshold above which send_file() switches to chunked transfer
+    // encoding rather than buffering the whole file in m_response_stream.
+    static constexpr size_t SEND_FILE_CHUNK_THRESHOLD = 1 * 1024 * 1024; // 1 MiB
+    static constexpr size_t SEND_FILE_FLUSH_INTERVAL  = 256 * 1024;      // 256 KiB
+
+    /**
+     * Reject filenames that are unsafe for use with the local filesystem.
+     *
+     * Rejects:
+     *   - empty strings
+     *   - embedded NUL / CR / LF
+     *   - absolute paths (anything beginning with '/')
+     *   - any path containing a "." or ".." segment
+     *
+     * Note: this is a syntactic check only. Callers that accept user-supplied
+     * path components should additionally canonicalize the result (e.g. with
+     * realpath(3)) and verify it is within an allowed base directory before
+     * touching the filesystem. Symlinks within the base directory can still
+     * escape it.
+     */
     static bool is_unsafe_filename(const std::string & filename)
     {
         if (filename.empty())
         {
             return true;
         }
-        if (filename.find('\0') != std::string::npos)
+        if (filename.find_first_of(std::string("\0\r\n", 3)) != std::string::npos)
         {
             return true;
         }
-        // Reject path traversal segments ".." but allow filenames like "foo..bar"
+        if (filename.front() == '/')
+        {
+            return true;
+        }
         size_t pos = 0;
         while (pos < filename.size())
         {
             size_t end = filename.find('/', pos);
             if (end == std::string::npos) end = filename.size();
             std::string seg = filename.substr(pos, end - pos);
-            if (seg == "..")
+            if (seg == "." || seg == "..")
             {
                 return true;
             }
@@ -55,7 +78,13 @@ namespace minerva
     void controller::register_handler(const std::string & name,
                                       std::function<void(http_context &)> func)
     {
-        m_handlers[name] = func;
+        auto it = m_handlers.find(name);
+        if (it != m_handlers.end())
+        {
+            LOG_WARN("controller: replacing existing handler for '"
+                     << name << "'");
+        }
+        m_handlers[name] = std::move(func);
     }
 
     bool controller::next_path_segment(std::istream & is,
@@ -66,7 +95,7 @@ namespace minerva
             next = "";
             return false;
         }
-        while (is.peek() == static_cast<int>('/'))
+        while (is.peek() == '/')
         {
             is.get();
         }
@@ -82,55 +111,66 @@ namespace minerva
     bool controller::save_to_file(const std::string & filename,
                                   http_context & ctx)
     {
-        // Validate filename for security
-        if (is_unsafe_filename(filename)) {
+        if (is_unsafe_filename(filename))
+        {
             LOG_ERROR("Invalid or unsafe filename: " << filename);
             ctx.response().status_code_bad_request();
             return false;
         }
 
-        std::ofstream os(filename, std::ios::out | std::ios::binary);
-        if (!os) {
+        // Atomic write: stage to a sibling temp file, fsync, rename, fsync
+        // parent. On failure (or if commit() is never called) the temp file
+        // is unlinked by safe_ofstream's destructor; the destination is
+        // left untouched.
+        safe_ofstream os(filename);
+        if (!os.is_open())
+        {
             LOG_ERROR("Failed to open file for write: " << filename);
             ctx.response().status_code_internal_error();
             return false;
         }
 
-        size_t read = 0;
         bool success = true;
-        
-        try {
-            do {
-                char buf[128*1024];
-                read = ctx.request().read(buf, sizeof(buf), 30000); // 30 second timeout
-                
-                if (read > 0) {
-                    os.write(buf, read);
-                    if (os.fail()) {
+
+        try
+        {
+            char buf[128 * 1024];
+            size_t read = 0;
+            do
+            {
+                // Pass 0 to defer to the per-context aggregate timeout
+                // (http_context::timed_out()), preventing slow-loris uploads
+                // from holding a worker thread indefinitely.
+                read = ctx.request().read(buf, sizeof(buf), 0);
+                if (read > 0)
+                {
+                    os.stream().write(buf, read);
+                    if (os.fail())
+                    {
                         LOG_ERROR("Failed to write to file: " << filename);
                         success = false;
                         break;
                     }
                 }
-            } while (read > 0);
-            
-            // Ensure all data is flushed
-            os.flush();
-            if (os.fail()) {
-                LOG_ERROR("Failed to flush file: " << filename);
-                success = false;
             }
+            while (read > 0);
         }
-        catch (const std::exception& e) {
+        catch (const std::exception & e)
+        {
             LOG_ERROR("Exception during file write: " << e.what());
             success = false;
         }
 
-        os.close();
-        
-        if (!success) {
-            // Clean up partial file
-            std::remove(filename.c_str());
+        if (!success)
+        {
+            // safe_ofstream's destructor will remove the temp file.
+            ctx.response().status_code_internal_error();
+            return false;
+        }
+
+        if (!os.commit())
+        {
+            LOG_ERROR("Failed to commit file: " << filename);
             ctx.response().status_code_internal_error();
             return false;
         }
@@ -190,77 +230,101 @@ namespace minerva
                                http_content_type::code content_type,
                                http_context & ctx)
     {
-        // Validate filename for security  
-        if (is_unsafe_filename(filename)) {
+        if (is_unsafe_filename(filename))
+        {
             LOG_ERROR("Invalid or unsafe filename: " << filename);
-            ctx.response().status_code_not_found(); // Don't reveal path traversal attempt
+            // Don't reveal the path-traversal attempt to the client.
+            ctx.response().status_code_not_found();
             return false;
         }
 
         std::ifstream is(filename, std::ios::in | std::ios::binary);
-        if (!is) {
+        if (!is)
+        {
             ctx.response().status_code_not_found();
             LOG_ERROR("Failed to open file for read: " << filename);
             return false;
         }
 
         ctx.response().content_type(content_type);
-        
-        // Get file size with proper error checking
+
         is.seekg(0, is.end);
         std::streampos file_size_pos = is.tellg();
-        
-        if (file_size_pos == std::streampos(-1)) {
+
+        if (file_size_pos == std::streampos(-1))
+        {
             LOG_ERROR("Failed to get file size: " << filename);
             ctx.response().status_code_internal_error();
             return false;
         }
-        
+
         size_t file_size = static_cast<size_t>(file_size_pos);
-        
-        // Check for reasonable file size limits (e.g., 100MB)
-        const size_t MAX_FILE_SIZE = 100 * 1024 * 1024;
-        if (file_size > MAX_FILE_SIZE) {
-            LOG_ERROR("File too large: " << filename << " (" << file_size << " bytes)");
+
+        if (file_size > s_max_send_file_size)
+        {
+            LOG_ERROR("File too large: " << filename
+                      << " (" << file_size << " bytes, limit "
+                      << s_max_send_file_size << ")");
             ctx.response().status_code_internal_error();
             return false;
         }
-        
+
         is.seekg(0, is.beg);
-        if (is.fail()) {
+        if (is.fail())
+        {
             LOG_ERROR("Failed to seek to beginning: " << filename);
             ctx.response().status_code_internal_error();
             return false;
         }
 
-        size_t remaining = file_size;
-        
-        try {
-            while (remaining > 0) {
-                char buf[10*1024];
+        // For large files, switch to chunked transfer encoding so we don't
+        // buffer the entire file in m_response_stream. The httpd dispatch
+        // loop will call flush_final_chunk() once we return.
+        const bool chunked = file_size >= SEND_FILE_CHUNK_THRESHOLD;
+        size_t remaining   = file_size;
+        size_t since_flush = 0;
+
+        try
+        {
+            while (remaining > 0)
+            {
+                char buf[64 * 1024];
                 size_t to_read = std::min(sizeof(buf), remaining);
-                
+
                 is.read(buf, to_read);
                 std::streamsize actually_read = is.gcount();
-                
-                if (actually_read <= 0) {
+
+                if (actually_read <= 0)
+                {
                     LOG_ERROR("Failed to read from file: " << filename);
                     ctx.response().status_code_internal_error();
                     return false;
                 }
-                
+
                 ctx.response().response_stream().write(buf, actually_read);
-                remaining -= actually_read;
-                
-                // Check for premature EOF
-                if (actually_read < static_cast<std::streamsize>(to_read) && remaining > 0) {
+                remaining   -= actually_read;
+                since_flush += actually_read;
+
+                if (chunked && since_flush >= SEND_FILE_FLUSH_INTERVAL)
+                {
+                    // First flush() sets chunked=true on the response and
+                    // writes the headers; subsequent calls send a chunk
+                    // and clear m_response_stream.
+                    ctx.response().status_code_success();
+                    ctx.response().flush();
+                    since_flush = 0;
+                }
+
+                if (actually_read < static_cast<std::streamsize>(to_read) && remaining > 0)
+                {
                     LOG_ERROR("Unexpected EOF in file: " << filename);
                     ctx.response().status_code_internal_error();
                     return false;
                 }
             }
         }
-        catch (const std::exception& e) {
+        catch (const std::exception & e)
+        {
             LOG_ERROR("Exception during file read: " << e.what());
             ctx.response().status_code_internal_error();
             return false;
