@@ -1,183 +1,195 @@
-#include <algorithm>
 #include <vector>
-#include <cassert>
-#include <memory>
+#include <utility>
 #include "scheduler.h"
 #include "log.h"
 
 namespace minerva
 {
+    namespace
+    {
+        // Cap on how long the timer thread sleeps when there is no work
+        // pending. Keeps the loop responsive to external state changes
+        // even though scheduling and shutdown both signal the cv.
+        constexpr std::chrono::seconds IDLE_POLL_CAP{60};
+    }
 
-    scheduler::scheduler(int threads) : should_shutdown(false), running(false), t(nullptr), tp(threads)
+    scheduler::scheduler(int threads) : tp(threads)
     {
     }
 
     scheduler::~scheduler()
     {
-        if (running)
+        if (state.load() != STOPPED)
         {
             stop();
             wait();
         }
-        // unique_ptr automatically cleans up the thread
     }
 
     scheduler::job_handle scheduler::schedule_job(job_element job,
-                                 std::chrono::milliseconds duration)
+                                                  std::chrono::milliseconds duration)
     {
-        auto when = std::chrono::steady_clock::now() + duration;
+        const auto when  = clock::now() + duration;
+        auto       entry = std::make_shared<job_entry>(std::move(job));
 
-        // have to put the job_element in a wrapper to satisfy stl
-        auto entry = std::shared_ptr<job_entry>(new job_entry(job));
-        assert(entry);
-
-        auto tuple = std::make_tuple(when, entry);
-
-        // add the job and notify the thread
         {
-            std::lock_guard<std::mutex> lk(lock);
-            jobs.insert(tuple);
-            cond.notify_one();
+            std::lock_guard<std::mutex> lk(mtx);
+            jobs.emplace(when, entry);
         }
+        cond.notify_one();
 
-        return job_handle(tuple);
+        return job_handle(when, std::weak_ptr<job_entry>(entry));
     }
 
-    bool scheduler::cancel_job(const job_handle & handle)
+    bool scheduler::cancel_job(const job_handle& handle)
     {
-        std::unique_lock<std::mutex> lk(lock);
-        
-        // the epoch
-        auto epoch = std::chrono::time_point<std::chrono::steady_clock>();
-
-        // job was never scheduled - assume cancelled
-        if (std::get<0>(handle.entry()) == epoch)
+        // Locking the weak_ptr also serves as the "is this a real handle?"
+        // check: a default-constructed handle has an empty weak_ptr and
+        // returns nullptr here.
+        auto entry = handle.m_entry.lock();
+        if (!entry)
         {
-            return true;
+            return false;
         }
 
-        auto search = jobs.find(handle.entry());
-        if (search != jobs.end())
+        std::lock_guard<std::mutex> lk(mtx);
+        auto range = jobs.equal_range(handle.m_when);
+        for (auto it = range.first; it != range.second; ++it)
         {
-            jobs.erase(search);
-            return true;
+            if (it->second == entry)
+            {
+                jobs.erase(it);
+                return true;
+            }
         }
-
         return false;
     }
 
-    void scheduler::wait_for_signal()
+    void scheduler::run_jobs(std::vector<job_element>& batch)
     {
-        std::unique_lock<std::mutex> lk(lock);
-
-        // get next run - set is already sorted, so just use begin()
-        auto it = jobs.begin();
-
-        auto now = std::chrono::steady_clock::now();
-
-        auto next_run = now + std::chrono::seconds(60);
-        if (it != jobs.end()) {
-            next_run = std::get<0>(*it);
-        }
-
-        // wait for a signal or until the next job is scheduled
-        if (next_run > now)
+        batch.clear();
         {
-            cond.wait_for(lk, next_run - now + std::chrono::microseconds(1));
-        }
-    }
+            std::unique_lock<std::mutex> lk(mtx);
 
-    void scheduler::run_jobs()
-    {
-        std::vector<job_element> to_run;
-        
-        // Critical section: find and extract expired jobs
+            // Wait until a job is due, the cv is signaled, or the idle cap
+            // expires. The predicate also handles spurious wakeups.
+            const auto now = clock::now();
+            time_point next = now + IDLE_POLL_CAP;
+            if (!jobs.empty())
+            {
+                next = jobs.begin()->first;
+            }
+
+            cond.wait_until(lk, next, [&] {
+                return should_shutdown.load() ||
+                       (!jobs.empty() && jobs.begin()->first <= clock::now());
+            });
+
+            if (should_shutdown.load())
+            {
+                return;
+            }
+
+            // Drain all expired jobs in one pass, moving the function objects
+            // out so we don't pay an extra std::function copy.
+            const auto cutoff = clock::now();
+            for (auto it = jobs.begin();
+                 it != jobs.end() && it->first <= cutoff; )
+            {
+                batch.emplace_back(std::move(it->second->job));
+                it = jobs.erase(it);
+            }
+        }
+
+        if (batch.empty())
         {
-            std::lock_guard<std::mutex> lk(lock);
-            
-            auto now = std::chrono::steady_clock::now();
-
-            // Find all expired jobs (jobs are sorted earliest→latest)
-            auto expired_end = jobs.begin();
-            for (auto it = jobs.begin(); it != jobs.end(); ++it)
-            {
-                if (std::get<0>(*it) <= now)
-                {
-                    expired_end = std::next(it);  // Point to one past the last expired job
-                }
-                else
-                {
-                    break;  // Since sorted, no more expired jobs
-                }
-            }
-
-            // Copy expired jobs to run and remove them from the set
-            for (auto it = jobs.begin(); it != expired_end; ++it)
-            {
-                to_run.push_back(std::get<1>(*it)->job);
-            }
-            
-            if (expired_end != jobs.begin())
-            {
-                jobs.erase(jobs.begin(), expired_end);
-            }
+            return;
         }
 
-        // run jobs with exception safety
-        tp.begin_queue_work_item();
-        std::for_each(to_run.begin(), to_run.end(), [this] (auto it) {
-                this->tp.queue_work_item_batch([it]()
-                                               {
-                                                   try
-                                                   {
-                                                       it();
-                                                   }
-                                                   catch (const std::exception& e)
-                                                   {
-                                                       LOG_ERROR("Scheduled job threw exception: " << e.what());
-                                                   }
-                                                   catch (...)
-                                                   {
-                                                       LOG_ERROR("Scheduled job threw unknown exception");
-                                                   }
-                                               });
-                    });
+        // Dispatch outside the scheduler lock so worker callbacks that
+        // reschedule won't deadlock.
+        if (!tp.begin_queue_work_item())
+        {
+            // Pool is stopping; drop the batch (jobs are best-effort).
+            return;
+        }
+        for (auto& j : batch)
+        {
+            tp.queue_work_item_batch([fn = std::move(j)]() {
+                try
+                {
+                    fn();
+                }
+                catch (const std::exception& e)
+                {
+                    LOG_ERROR("Scheduled job threw exception: " << e.what());
+                }
+                catch (...)
+                {
+                    LOG_ERROR("Scheduled job threw unknown exception");
+                }
+            });
+        }
         tp.end_queue_work_item();
     }
 
     void scheduler::run()
     {
+        std::vector<job_element> batch;
         while (!should_shutdown.load())
         {
-            wait_for_signal();
-            run_jobs();
+            run_jobs(batch);
         }
     }
 
     void scheduler::start()
     {
-        assert(!running);
-        t = std::make_unique<std::thread>(&scheduler::run, this);
-        assert(t);
+        state_t expected = STOPPED;
+        if (!state.compare_exchange_strong(expected, RUNNING))
+        {
+            LOG_WARN("scheduler::start: already started (state=" << expected << ")");
+            return;
+        }
+        should_shutdown.store(false);
+        // Start the pool *before* the timer thread, so any immediate dispatch
+        // lands in a fully initialized pool.
         tp.start();
-        running = true;
+        t = std::make_unique<std::thread>(&scheduler::run, this);
     }
 
     void scheduler::stop()
     {
-        std::unique_lock<std::mutex> lk(lock);
-        should_shutdown.store(true);
+        // Mark state STOPPING and request shutdown. Notify under the lock so
+        // the timer thread sees the flag, but call tp.stop() *outside* the
+        // lock to avoid a fixed lock order between scheduler::mtx and the
+        // pool's internal mutex.
+        state_t expected = RUNNING;
+        if (!state.compare_exchange_strong(expected, STOPPING))
+        {
+            // Already stopped/stopping; idempotent.
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            should_shutdown.store(true);
+        }
         cond.notify_one();
-        tp.stop();  // Now called within the lock for thread safety
+        tp.stop();
     }
 
     void scheduler::wait()
     {
-        assert(running);
-        t->join();
-        tp.wait();  // Wait for thread pool threads to exit
-        running = false;
+        // Idempotent: nothing to wait on if we're already stopped.
+        if (state.load() == STOPPED)
+        {
+            return;
+        }
+        if (t && t->joinable())
+        {
+            t->join();
+        }
+        t.reset();
+        tp.wait();
+        state.store(STOPPED);
     }
-
-
 }

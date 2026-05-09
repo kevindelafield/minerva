@@ -1,79 +1,55 @@
 #pragma once
 
+#include <condition_variable>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <sys/stat.h>
 #include "file_lock.h"
 
 namespace minerva
 {
-    // Refcounted file lock that is shared between threads of the same
-    // process, exclusive across processes.
-    //
-    // Despite the name, this is NOT POSIX LOCK_SH (multiple-readers)
-    // semantics: it acquires an exclusive OS-level file lock on the
-    // first lock() call and releases it on the last unlock() call from
-    // the same process.  Within the process, additional threads
-    // calling lock() simply bump a counter and proceed without
-    // blocking on the OS.
-    //
-    // Intended usage: one shared_file_lock instance per file per
-    // process, used by many threads.
-    class shared_file_lock : public file_lock
+    /**
+     * Cross-process exclusive file lock that is reference-counted across
+     * threads of the same process. The first thread to call lock() acquires
+     * an exclusive flock(2) on the file; subsequent threads in this process
+     * fast-path on the in-process counter without re-entering the kernel.
+     * The OS lock is released only when the last in-process holder calls
+     * unlock().
+     *
+     * IMPORTANT:
+     *   - The name uses "shared" in the in-process sense (the OS lock is
+     *     shared by threads of this process). It is NOT POSIX LOCK_SH.
+     *   - Because counter > 0 makes try_lock() succeed for any thread, this
+     *     class is unsafe for in-process mutual exclusion. It is only useful
+     *     for cross-process exclusion.
+     *   - Do not use across fork() without exec(): the child inherits the
+     *     in-process counter as if it held the lock, but the OS-level flock
+     *     ownership is per-fd / per-process and may not behave as expected.
+     *     Construct a fresh shared_file_lock in the child, or call exec().
+     */
+    class shared_file_lock final
     {
     public:
-        shared_file_lock(const std::string & name, int flags, mode_t mode)
-            : file_lock(name, flags, mode)
-        {
-        }
+        shared_file_lock(const std::string& name, int flags, mode_t mode);
 
-        void lock() override
-        {
-            std::unique_lock<std::mutex> lk(m_lock);
-            if (m_counter == 0)
-            {
-                // Block on the OS lock while holding the mutex.  Since
-                // every other thread arriving here would also need the
-                // OS lock, serializing them on the mutex costs nothing.
-                file_lock::lock();
-            }
-            ++m_counter;
-        }
+        shared_file_lock(const shared_file_lock&)            = delete;
+        shared_file_lock& operator=(const shared_file_lock&) = delete;
+        shared_file_lock(shared_file_lock&&)                 = delete;
+        shared_file_lock& operator=(shared_file_lock&&)      = delete;
 
-        bool try_lock() override
-        {
-            std::unique_lock<std::mutex> lk(m_lock);
-            if (m_counter > 0)
-            {
-                ++m_counter;
-                return true;
-            }
-            if (!file_lock::try_lock())
-            {
-                return false;
-            }
-            ++m_counter;
-            return true;
-        }
+        void lock();
+        bool try_lock();
+        void unlock();
 
-        void unlock() override
-        {
-            std::unique_lock<std::mutex> lk(m_lock);
-            if (m_counter == 0)
-            {
-                throw std::logic_error(
-                    "shared_file_lock::unlock called when not locked: " +
-                    get_name());
-            }
-            --m_counter;
-            if (m_counter == 0)
-            {
-                file_lock::unlock();
-            }
-        }
+        const std::string& get_name() const { return m_inner.get_name(); }
 
     private:
-        std::mutex m_lock;
-        int        m_counter = 0;  // protected by m_lock
+        file_lock               m_inner;
+        std::mutex              m_mtx;
+        std::condition_variable m_cv;
+        std::size_t             m_counter   = 0;   // logical holders
+        bool                    m_acquiring = false; // OS lock in flight
+        bool                    m_held      = false; // OS lock held
     };
 }
