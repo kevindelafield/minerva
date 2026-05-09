@@ -20,6 +20,47 @@ namespace minerva
         ERR_clear_error(); // Ensure complete error queue cleanup
     }
 
+    // Maps an OpenSSL return code (from SSL_read/SSL_write/SSL_accept/
+    // SSL_shutdown) onto our CONNECTION_STATUS.  `rc` is the original return
+    // value from the SSL_* call so SSL_get_error() can be invoked correctly.
+    static connection::CONNECTION_STATUS map_ssl_error(SSL * ssl, int rc)
+    {
+        int ssl_status = SSL_get_error(ssl, rc);
+        switch (ssl_status)
+        {
+        case SSL_ERROR_WANT_READ:
+            return connection::CONNECTION_WANTS_READ;
+        case SSL_ERROR_WANT_WRITE:
+            return connection::CONNECTION_WANTS_WRITE;
+        case SSL_ERROR_ZERO_RETURN:
+            // Peer sent a clean close_notify
+            return connection::CONNECTION_CLOSED;
+        case SSL_ERROR_SYSCALL:
+        {
+            int saved_errno = errno;
+            // rc == 0 means EOF observed in violation of protocol;
+            // rc == -1 means a real syscall error.  Either way, an
+            // errno of 0 indicates the peer simply went away.
+            if (rc == 0 || saved_errno == 0)
+            {
+                return connection::CONNECTION_CLOSED;
+            }
+            if (saved_errno == ECONNRESET || saved_errno == EPIPE ||
+                saved_errno == ENOTCONN)
+            {
+                return connection::CONNECTION_CLOSED;
+            }
+            log_ssl_errors();
+            LOG_DEBUG_ERRNO("ssl syscall error", saved_errno);
+            return connection::CONNECTION_ERROR;
+        }
+        case SSL_ERROR_SSL:
+        default:
+            log_ssl_errors();
+            return connection::CONNECTION_ERROR;
+        }
+    }
+
     SSL_CTX * ssl_connection::m_ssl_ctx = nullptr;
 
     ssl_connection::ssl_connection(int socket) : connection(socket)
@@ -121,56 +162,35 @@ namespace minerva
 
     ssl_connection::CONNECTION_STATUS ssl_connection::shutdown()
     {
+        // SSL_shutdown returns:
+        //   1  -> bidirectional shutdown complete
+        //   0  -> close_notify sent; peer's close_notify not yet received.
+        //         Caller should call us again (typically after waiting for
+        //         readability) to drive the second half.
+        //   <0 -> consult SSL_get_error()
         int status = SSL_shutdown(m_ssl);
-        if (status < 1)
+        if (status == 1)
         {
-            int ssl_status = SSL_get_error(m_ssl, status);
-
-            switch (ssl_status)
-            {
-            case SSL_ERROR_WANT_READ:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
-            }
-            break;
-            case SSL_ERROR_WANT_WRITE:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
-            }
-            break;
-            case SSL_ERROR_SYSCALL:
-            {
-                log_ssl_errors();
-
-                if (status == 0)
-                {
-                    return CONNECTION_STATUS::CONNECTION_CLOSED;
-                }
-                else if (status == -1)
-                {
-                    return CONNECTION_STATUS::CONNECTION_ERROR;
-                }
-                else
-                {
-                    return CONNECTION_STATUS::CONNECTION_ERROR;
-                }
-            }
-            break;
-            default:
-            {
-                log_ssl_errors();
-                return CONNECTION_STATUS::CONNECTION_ERROR;
-            }
-            break;
-            }
+            return CONNECTION_STATUS::CONNECTION_OK;
         }
-
-        return CONNECTION_STATUS::CONNECTION_OK;
+        if (status == 0)
+        {
+            // Need a second call after the peer responds.  Asking the caller
+            // to wait for readability matches OpenSSL's recommendation.
+            return CONNECTION_STATUS::CONNECTION_WANTS_READ;
+        }
+        return map_ssl_error(m_ssl, status);
     }
 
     void ssl_connection::init(const char * cert_file,
                               const char * key_file)
     {
+        if (m_ssl_ctx)
+        {
+            // Idempotent guard: refuse to leak the prior context.
+            throw std::runtime_error("ssl_connection::init called more than once");
+        }
+
         SSL_library_init();
         SSL_load_error_strings();
         OpenSSL_add_all_algorithms();
@@ -245,45 +265,7 @@ namespace minerva
         int status = SSL_accept(m_ssl);
         if (status < 1)
         {
-            int ssl_status = SSL_get_error(m_ssl, status);
-
-            switch (ssl_status)
-            {
-            case SSL_ERROR_WANT_READ:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
-            }
-            break;
-            case SSL_ERROR_WANT_WRITE:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
-            }
-            break;
-            case SSL_ERROR_SYSCALL:
-            {
-                log_ssl_errors();
-
-                if (status == 0)
-                {
-                    return CONNECTION_STATUS::CONNECTION_CLOSED;
-                }
-                else if (status == -1)
-                {
-                    return CONNECTION_STATUS::CONNECTION_ERROR;
-                }
-                else
-                {
-                    return CONNECTION_STATUS::CONNECTION_ERROR;
-                }
-            }
-            break;
-            default:
-            {
-                log_ssl_errors();
-                return CONNECTION_STATUS::CONNECTION_ERROR;
-            }
-            break;
-            }
+            return map_ssl_error(m_ssl, status);
         }
 
         int version = SSL_version(m_ssl);
@@ -306,8 +288,11 @@ namespace minerva
             tlsv = "TLS version unknown";
             break;
         }
-        LOG_INFO("accept with cipher: " << SSL_get_cipher_list(m_ssl, 0) <<
-                 " " << tlsv);
+        // Log the *negotiated* cipher (the previous code logged the first
+        // configured cipher, which is not what was actually selected).
+        const SSL_CIPHER * cipher = SSL_get_current_cipher(m_ssl);
+        const char * cipher_name = cipher ? SSL_CIPHER_get_name(cipher) : "(none)";
+        LOG_INFO("accept with cipher: " << cipher_name << " " << tlsv);
         return CONNECTION_STATUS::CONNECTION_OK;
     }
 
@@ -315,51 +300,17 @@ namespace minerva
                                                        size_t length,
                                                        ssize_t & read)
     {
+        if (length == 0)
+        {
+            read = 0;
+            return CONNECTION_STATUS::CONNECTION_OK;
+        }
+
         int status = SSL_read(m_ssl, buf, length);
         if (status < 1)
         {
-            int ssl_status = SSL_get_error(m_ssl, status);
-
-            switch (ssl_status)
-            {
-            case SSL_ERROR_WANT_READ:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
-            }
-            break;
-            case SSL_ERROR_WANT_WRITE:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
-            }
-            break;
-            case SSL_ERROR_SYSCALL:
-            {
-                log_ssl_errors();
-
-                if (status == 0)
-                {
-                    return CONNECTION_STATUS::CONNECTION_CLOSED;
-                }
-                else if (status == -1)
-                {
-                    LOG_ERROR_ERRNO("ssl syscall error: ", errno);
-                    return CONNECTION_STATUS::CONNECTION_ERROR;
-                }
-                else
-                {
-                    LOG_ERROR("ssl error");
-                    return CONNECTION_STATUS::CONNECTION_ERROR;
-                }
-            }
-            break;
-            default:
-            {
-                log_ssl_errors();
-                LOG_ERROR("ssl unknown error");
-                return CONNECTION_STATUS::CONNECTION_ERROR;
-            }
-            break;
-            }
+            read = 0;
+            return map_ssl_error(m_ssl, status);
         }
 
         read = status;
@@ -371,44 +322,17 @@ namespace minerva
                                                         size_t length,
                                                         ssize_t & written)
     {
+        if (length == 0)
+        {
+            written = 0;
+            return CONNECTION_STATUS::CONNECTION_OK;
+        }
+
         int status = SSL_write(m_ssl, buf, length);
         if (status < 1)
         {
-            int ssl_status = SSL_get_error(m_ssl, status);
-
-            switch (ssl_status)
-            {
-            case SSL_ERROR_WANT_READ:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_READ;
-            }
-            break;
-            case SSL_ERROR_WANT_WRITE:
-            {
-                return CONNECTION_STATUS::CONNECTION_WANTS_WRITE;
-            }
-            break;
-            case SSL_ERROR_SYSCALL:
-            {
-                log_ssl_errors();
-
-                if (status == 0)
-                {
-                    return CONNECTION_STATUS::CONNECTION_CLOSED;
-                }
-                else
-                {
-                    return CONNECTION_STATUS::CONNECTION_ERROR;
-                }
-            }
-            break;
-            default:
-            {
-                log_ssl_errors();
-                return CONNECTION_STATUS::CONNECTION_ERROR;
-            }
-            break;
-            }
+            written = 0;
+            return map_ssl_error(m_ssl, status);
         }
 
         written = status;

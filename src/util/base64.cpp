@@ -35,9 +35,7 @@ namespace minerva
     std::string to64frombits(const std::string & in)
     {
         std::string out;
-
-        out.clear();
-        out.reserve((in.size() * 4 / 3) + 4); // Correct: 3 input bytes -> 4 output bytes
+        out.reserve((in.size() * 4 / 3) + 4); // 3 input bytes -> 4 output bytes
 
         size_t inlen = in.size();
         size_t count = 0;
@@ -74,20 +72,18 @@ namespace minerva
     std::string to64frombits(const std::vector<unsigned char> & in)
     {
         std::string out;
-
-        out.clear();
-        out.reserve((in.size() * 4 / 3) + 4); // Correct: 3 input bytes -> 4 output bytes
+        out.reserve((in.size() * 4 / 3) + 4); // 3 input bytes -> 4 output bytes
 
         size_t inlen = in.size();
         size_t count = 0;
         for (; inlen >= 3; inlen -= 3)
         {
             out += base64digits[in[count+0] >> 2];
-            out += 
-                base64digits[(in[count+0] << 4) & 0x30 | 
+            out +=
+                base64digits[((in[count+0] << 4) & 0x30) |
                              (in[count+1] >> 4)];
-            out += 
-                base64digits[(in[count+1] << 2) & 0x3c | 
+            out +=
+                base64digits[((in[count+1] << 2) & 0x3c) |
                              (in[count+2] >> 6)];
             out += base64digits[in[count+2] & 0x3f];
             count += 3;
@@ -103,9 +99,8 @@ namespace minerva
             if (inlen > 1) fragment |= in[count+1] >> 4;
 
             out += base64digits[fragment];
-            out += (inlen < 2) ? '=' : 
-                base64digits[(in[count+1] << 2) & 
-                             static_cast<unsigned char>(0x3c)];
+            out += (inlen < 2) ? '=' :
+                base64digits[(in[count+1] << 2) & 0x3c];
             out += '=';
         }
 
@@ -136,9 +131,6 @@ namespace minerva
             if (c == '\r' || c == '\n' || c == ' ' || c == '\t') {
                 continue; // Skip whitespace
             }
-            if (c == '\r') {
-                break; // Early termination on \r
-            }
             clean += c;
         }
         
@@ -151,41 +143,43 @@ namespace minerva
             return false;
         }
         
-        out.reserve((clean.size() * 3 / 4) + 1); // Correct calculation
-        
+        out.reserve((clean.size() * 3 / 4) + 1);
+
         // Process in safe 4-byte chunks
         for (size_t i = 0; i < clean.size(); i += 4) {
             unsigned char digit1 = static_cast<unsigned char>(clean[i]);
             unsigned char digit2 = static_cast<unsigned char>(clean[i+1]);
             unsigned char digit3 = static_cast<unsigned char>(clean[i+2]);
             unsigned char digit4 = static_cast<unsigned char>(clean[i+3]);
-            
-            // Validate all digits before processing
-            if (DECODE64(digit1) == BAD || DECODE64(digit2) == BAD) {
+
+            // Padding is only allowed in the final 4-byte group
+            bool is_last_group = (i + 4 == clean.size());
+            if (!is_last_group && (digit3 == '=' || digit4 == '=')) {
                 return false;
             }
-            if (digit3 != '=' && DECODE64(digit3) == BAD) {
+            // '=' in digit3 requires '=' in digit4
+            if (digit3 == '=' && digit4 != '=') {
                 return false;
             }
-            if (digit4 != '=' && DECODE64(digit4) == BAD) {
+
+            char d1 = DECODE64(digit1);
+            char d2 = DECODE64(digit2);
+            char d3 = (digit3 == '=') ? 0 : DECODE64(digit3);
+            char d4 = (digit4 == '=') ? 0 : DECODE64(digit4);
+
+            if (d1 == BAD || d2 == BAD || d3 == BAD || d4 == BAD) {
                 return false;
             }
-            
-            // Decode the 4-byte group
-            out += (DECODE64(digit1) << 2) | (DECODE64(digit2) >> 4);
+
+            out += static_cast<char>((d1 << 2) | (d2 >> 4));
             if (digit3 != '=') {
-                out += ((DECODE64(digit2) << 4) & 0xf0) | (DECODE64(digit3) >> 2);
+                out += static_cast<char>(((d2 << 4) & 0xf0) | (d3 >> 2));
                 if (digit4 != '=') {
-                    out += ((DECODE64(digit3) << 6) & 0xc0) | DECODE64(digit4);
+                    out += static_cast<char>(((d3 << 6) & 0xc0) | d4);
                 }
             }
-            
-            // Stop at padding
-            if (digit4 == '=' || digit3 == '=') {
-                break;
-            }
         }
-        
+
         return true;
     }
 }
