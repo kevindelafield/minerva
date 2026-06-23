@@ -553,6 +553,16 @@ namespace minerva
             
             int err;
             int status = connection::poll(fds, polling_period_ms, err);
+
+            // httpd::stop() shuts the listener sockets down to wake this poll
+            // immediately; that causes poll() to return with POLLHUP/POLLERR
+            // set on the listener fds.  Detect shutdown here and exit the loop
+            // cleanly instead of treating it as a spurious error below.
+            if (should_shutdown())
+            {
+                break;
+            }
+
             if (status == 0)
             {
                 continue;
@@ -572,6 +582,13 @@ namespace minerva
             {
                 if (it.error)
                 {
+                    // During shutdown the listener sockets are deliberately
+                    // closed, which surfaces here as an error flag.  Exit
+                    // quietly rather than logging and sleeping.
+                    if (should_shutdown())
+                    {
+                        break;
+                    }
                     LOG_WARN("error on listener thread");
                     std::this_thread::sleep_for(std::chrono::seconds(2));
                     continue;
