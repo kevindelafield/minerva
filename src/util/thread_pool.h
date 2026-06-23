@@ -1,169 +1,113 @@
 #pragma once
 
-#include <vector>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <queue>
-#include <functional>
 #include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <functional>
 #include <future>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <type_traits>
+#include <vector>
 
 namespace minerva
 {
-
+    /**
+     * Fixed-size worker pool that runs std::function<void()> jobs.
+     *
+     * Lifecycle: STOPPED -> start() -> RUNNING -> stop() -> STOPPING -> wait()
+     * -> STOPPED. start() and stop() are idempotent and race-safe via a
+     * compare_exchange on an internal state enum.
+     */
     class thread_pool
     {
     public:
         typedef std::function<void()> work_element;
 
-        /**
-         * Create a thread pool with the specified number of worker threads.
-         * @param count Number of worker threads (must be > 0)
-         */
         explicit thread_pool(int count);
-        
-        // Non-copyable and non-movable due to atomic and const members
-        thread_pool(const thread_pool&) = delete;
-        thread_pool& operator=(const thread_pool&) = delete;
-        thread_pool(thread_pool&&) = delete;
-        thread_pool& operator=(thread_pool&&) = delete;
 
-        /**
-         * Destructor automatically stops the thread pool and waits for completion.
-         * Equivalent to calling stop() followed by wait().
-         */
+        thread_pool(const thread_pool&)            = delete;
+        thread_pool& operator=(const thread_pool&) = delete;
+        thread_pool(thread_pool&&)                 = delete;
+        thread_pool& operator=(thread_pool&&)      = delete;
+
         ~thread_pool();
 
         /**
-         * Queue a work item for execution.
-         * Thread-safe and can be called from any thread.
-         * 
-         * @param work The work item to queue
-         * @return true if work was successfully queued, false if thread pool is stopped or stopping
+         * Queue a single work item. Returns false if the pool is not RUNNING
+         * or has begun shutting down.
          */
         bool queue_work_item(work_element work);
 
         /**
-         * Submit a task and get a future for the result.
-         * Template function for type-safe async execution.
-         * 
-         * @param f Function or callable to execute
-         * @param args Arguments to pass to the function
-         * @return Future containing the result of the function
-         * @throws std::runtime_error if thread pool is stopped or stopping
-         * 
-         * Note: Unlike queue_work_item(), this method throws on failure because
-         * returning an invalid future would be more dangerous than an exception.
+         * Submit a callable and get a future for its result. Throws
+         * std::runtime_error if the pool can't accept work.
          */
         template<typename F, typename... Args>
-        auto submit(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
+        auto submit(F&& f, Args&&... args)
+            -> std::future<std::invoke_result_t<F, Args...>>;
 
         /**
-         * Batch work item operations for efficiency.
-         * Call begin_queue_work_item(), multiple queue_work_item_batch(), then end_queue_work_item().
-         * 
-         * @return true if batch mode started successfully, false if thread pool is stopped or stopping
+         * Batch enqueue API. Pattern:
+         *     pool.begin_queue_work_item();
+         *     pool.queue_work_item_batch(job1);
+         *     pool.queue_work_item_batch(job2);
+         *     pool.end_queue_work_item();
+         *
+         * begin always takes the work mutex (so end can always unlock it
+         * unconditionally). The boolean returns indicate whether the items
+         * were actually accepted into the queue; callers can ignore them
+         * and still call end safely.
          */
         bool begin_queue_work_item();
-        
-        /**
-         * Queue a work item in batch mode (between begin_queue_work_item and end_queue_work_item).
-         * 
-         * @param work The work item to queue
-         * @return true if work was successfully queued, false if thread pool is stopped or stopping
-         */
         bool queue_work_item_batch(work_element work);
-        
-        /**
-         * End batch queuing mode and notify workers.
-         */
         void end_queue_work_item();
 
-        /**
-         * Start the thread pool. Must be called before queueing work.
-         */
         void start();
-        
-        /**
-         * Signal the thread pool to begin shutdown.
-         * This will stop accepting new work and signal workers to exit after completing current tasks.
-         * Call wait() to block until all threads have actually exited.
-         * 
-         * This method is idempotent - safe to call multiple times.
-         * Subsequent calls after the first will have no effect.
-         */
         void stop();
-
-        /**
-         * Wait for all worker threads to exit.
-         * Must call stop() first to trigger shutdown.
-         * 
-         * This method is idempotent - safe to call multiple times.
-         * If already waited, subsequent calls return immediately.
-         */
         void wait();
+        void stop_and_wait() { stop(); wait(); }
 
-        /**
-         * Convenience method that calls stop() followed by wait().
-         * Equivalent to the old stop_and_wait() behavior.
-         */
-        void stop_and_wait() {
-            stop();
-            wait();
+        int    get_thread_count() const { return thread_count; }
+        size_t get_queue_size()   const;
+
+        /** True only when started and not shutting down. */
+        bool is_running() const
+        {
+            return state.load() == RUNNING && !should_shutdown.load();
         }
 
-        /**
-         * Get the number of worker threads.
-         */
-        int get_thread_count() const { return thread_count; }
-        
-        /**
-         * Get the number of pending work items.
-         */
-        size_t get_queue_size() const;
-
-        /**
-         * Check if the thread pool is running.
-         */
-        bool is_running() const { return running.load(); }
-
     private:
-        const int thread_count;
-        std::atomic<bool> should_shutdown{false};
-        std::atomic<bool> running{false};
-        
-        std::queue<work_element> work_items;
-        std::vector<std::thread> threads;  // Use vector instead of set of pointers
-        
-        mutable std::mutex work_mutex;
-        std::condition_variable work_condition;
-        
+        enum state_t { STOPPED, RUNNING, STOPPING };
+
+        const int                 thread_count;
+        std::atomic<state_t>      state{STOPPED};
+        std::atomic<bool>         should_shutdown{false};
+
+        std::queue<work_element>  work_items;
+        std::vector<std::thread>  threads;
+
+        mutable std::mutex        work_mutex;
+        std::condition_variable   work_condition;
+
         void worker_thread();
     };
 
-    // Template implementation
     template<typename F, typename... Args>
-    auto thread_pool::submit(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>
+    auto thread_pool::submit(F&& f, Args&&... args)
+        -> std::future<std::invoke_result_t<F, Args...>>
     {
-        using return_type = typename std::result_of<F(Args...)>::type;
-        
+        using return_type = std::invoke_result_t<F, Args...>;
+
         auto task = std::make_shared<std::packaged_task<return_type()>>(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
-        
+            std::bind(std::forward<F>(f), std::forward<Args>(args)...));
         std::future<return_type> result = task->get_future();
-        
-        bool queued = queue_work_item([task]() {
-            (*task)();
-        });
-        
-        if (!queued) {
-            // If we couldn't queue the work, we need to handle this
-            // The future will never be satisfied, so we should throw
+
+        if (!queue_work_item([task]() { (*task)(); }))
+        {
             throw std::runtime_error("Cannot submit work to stopped thread pool");
         }
-        
         return result;
     }
 }

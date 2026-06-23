@@ -2,74 +2,58 @@
 
 #include <chrono>
 #include <ctime>
-#include <mutex>
-#include <atomic>
-#include <thread>
-#include <functional>
 #include <string>
-#include <time.h>
 
 namespace minerva
 {
-    std::string ctime(const std::time_t & time);
+    /**
+     * Thread-safe wrappers around the C time formatters.
+     *
+     * On invalid input (e.g. a time_t that cannot be represented), ctime()
+     * returns an empty string and the *time wrappers return a zeroed std::tm.
+     */
+    std::string ctime(const std::time_t& time);
+    std::tm     localtime(const std::time_t& time);
+    std::tm     gmtime(const std::time_t& time);
 
-    std::tm localtime(const std::time_t & time);
-
-    std::tm gmtime(const std::time_t & time);
-
+    /**
+     * Steady-clock stopwatch.
+     *
+     * NOT thread-safe: callers must serialize access externally.
+     *
+     * Lifecycle:
+     *   - Default-constructed timer is already running ("now").
+     *   - start()  : (re)start. Discards any prior elapsed time.
+     *   - stop()   : freeze elapsed at "now". No-op if already stopped.
+     *   - reset()  : clear and stop.
+     */
     class timer
     {
     public:
-        /// Convenience alias
         using time_point = std::chrono::steady_clock::time_point;
 
-        /// Constructor - timer starts immediately
         timer();
 
-        /// Start the timer
+        timer(const timer&)            = delete;
+        timer& operator=(const timer&) = delete;
+        timer(timer&&)                 = delete;
+        timer& operator=(timer&&)      = delete;
+
         void start();
-
-        /// Stop the timer
         void stop();
-
-        /// Clears the timer
         void reset() noexcept;
 
-        /// Get the elapsed time in seconds
-        double get_elapsed_time() const;
-
-        /// Get the elapsed time in milliseconds
+        double    get_elapsed_time()         const;
         long long get_elapsed_milliseconds() const;
 
-        /// Determine if the timer is currently running
-        bool is_running();
-
-        /*
-         * Disable copying / move semantics
-         */
-        timer(const timer& other) = default;
-               
-        timer& operator= (const timer& other)
-            {
-                if (this != &other)
-                {
-                    start_time = other.start_time;
-                    stop_time = other.stop_time;
-                    m_is_running = other.m_is_running;
-                }
-                return *this;
-            }
-
-        timer(timer&&) = delete;
-        timer& operator= (timer&&) = delete;
-
+        bool is_running() const { return m_is_running; }
 
     protected:
         static time_point get_time_now();
 
     private:
-        time_point start_time;
-        time_point stop_time;
-        bool m_is_running;
+        time_point start_time{};
+        time_point stop_time{};
+        bool       m_is_running{false};
     };
 }

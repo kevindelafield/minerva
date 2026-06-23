@@ -33,19 +33,7 @@ namespace minerva
     {
     }
 
-    connection::connection(const connection & conn) :
-        socket(dup(conn.get_socket())),
-        last_read(conn.last_read),
-        last_write(conn.last_write),
-        overflow(conn.overflow)
-    {
-        if (socket < 0)
-        {
-            FATAL_ERRNO("failed to duplicate socket", errno);
-        }
-    }
-
-    connection::connection(connection && conn) :
+    connection::connection(connection && conn) noexcept :
         socket(conn.socket),
         last_read(conn.last_read),
         last_write(conn.last_write),
@@ -54,47 +42,24 @@ namespace minerva
         conn.socket = -1;  // Invalidate source socket (transfer ownership)
     }
 
-    connection & connection::operator=(const connection & conn)
-    {
-        if (this != &conn)
-        {
-            // Duplicate first (can fail without side effects)
-            int new_socket = dup(conn.get_socket());
-            if (new_socket < 0)
-            {
-                FATAL_ERRNO("failed to duplicate socket", errno);
-            }
-            
-            // Only close old socket after successful dup
-            if (socket >= 0)
-            {
-                close(socket);
-            }
-            
-            // Safe to assign now
-            socket = new_socket;
-            last_read = conn.last_read;
-            last_write = conn.last_write;
-            overflow = conn.overflow;
-        }
-        return *this;
-    }
-
-    connection & connection::operator=(connection && conn)
+    connection & connection::operator=(connection && conn) noexcept
     {
         if (this != &conn)
         {
             // Close existing socket first to prevent leak
-            if (socket > -1)
+            if (socket >= 0)
             {
-                close(socket);
+                if (close(socket) != 0)
+                {
+                    LOG_ERROR_ERRNO("error closing socket: " << socket, errno);
+                }
             }
-            
-        // Transfer ownership
-        socket = conn.socket;
-        last_read = conn.last_read;
-        last_write = conn.last_write;
-        overflow = std::move(conn.overflow);            // Invalidate source
+
+            // Transfer ownership
+            socket = conn.socket;
+            last_read = conn.last_read;
+            last_write = conn.last_write;
+            overflow = std::move(conn.overflow);
             conn.socket = -1;
         }
         return *this;
@@ -102,12 +67,14 @@ namespace minerva
 
     connection::~connection()
     {
-        if (socket > -1)
+        if (socket >= 0)
         {
-            int status = close(socket);
-            if (status)
+            if (close(socket) != 0)
             {
-                FATAL_ERRNO("error closing socket: " << socket, errno);
+                // Don't FATAL: on Linux the fd is released regardless, and
+                // EINTR/EIO from a previously buffered write should not
+                // terminate the process during shutdown.
+                LOG_ERROR_ERRNO("error closing socket: " << socket, errno);
             }
         }
     }
@@ -191,7 +158,7 @@ namespace minerva
         int flags = fcntl(socket, F_GETFL, 0);
         if (flags < 0)
         {
-            LOG_ERROR_ERRNO("fcntl failed", errno);
+            LOG_ERROR_ERRNO("fcntl F_GETFL failed", errno);
             return false;
         }
 
@@ -204,10 +171,9 @@ namespace minerva
             flags |= O_NONBLOCK;
         }
 
-        flags = fcntl(socket, F_SETFL, flags) != -1;
-        if (flags < 0)
+        if (fcntl(socket, F_SETFL, flags) == -1)
         {
-            LOG_ERROR_ERRNO("fcntl failed", errno);
+            LOG_ERROR_ERRNO("fcntl F_SETFL failed", errno);
             return false;
         }
         return true;
@@ -226,10 +192,13 @@ namespace minerva
 
     bool connection::reuse_addr6(bool reuse)
     {
+        // SO_REUSEADDR lives at SOL_SOCKET, not SOL_IPV6.  This is the same
+        // option as reuse_addr() but kept as a separate method for callers
+        // operating on IPv6 sockets that want a distinct call site.
         int enable = reuse;
-        if (setsockopt(socket, SOL_IPV6, SO_REUSEADDR, &enable, sizeof(enable)))
+        if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
         {
-            LOG_ERROR_ERRNO("setsockopt failed", errno);
+            LOG_ERROR_ERRNO("setsockopt SO_REUSEADDR failed", errno);
             return false;
         }
         return true;
@@ -303,31 +272,26 @@ namespace minerva
     {
         err = 0;
 
-        std::vector<struct pollfd> in;
-        in.resize(fds.size());
-        int i = 0;
-
-        std::for_each(fds.begin(), fds.end(),
-                      [&in, &i](shared_poll_fd fd) {
-                          struct pollfd ps;
-                          std::memset(&ps, 0, sizeof(ps));
-                          in[i].fd = fd.socket;
-                          if (fd.read)
-                          {
-                              in[i].events |= POLLIN;
-                              in[i].events |= POLLRDHUP;
-                          }
-                          if (fd.write)
-                          {
-                              in[i].events |= POLLOUT;
-                          }
-                          if (fd.error)
-                          {
-                              in[i].events |= POLLERR;
-                              in[i].events |= POLLHUP;
-                          }
-                          i++;
-                      });
+        std::vector<struct pollfd> in(fds.size());
+        for (size_t i = 0; i < fds.size(); ++i)
+        {
+            std::memset(&in[i], 0, sizeof(in[i]));
+            in[i].fd = fds[i].socket;
+            if (fds[i].read)
+            {
+                in[i].events |= POLLIN;
+                in[i].events |= POLLRDHUP;
+            }
+            if (fds[i].write)
+            {
+                in[i].events |= POLLOUT;
+            }
+            if (fds[i].error)
+            {
+                in[i].events |= POLLERR;
+                in[i].events |= POLLHUP;
+            }
+        }
 
         int status = ::poll(in.data(), in.size(), timeoutMs);
         if (status < 0)
@@ -345,9 +309,9 @@ namespace minerva
         {
             auto & fd = fds[i];
 
-            fd.read = in[i].revents & POLLIN || in[i].revents & POLLRDHUP;
-            fd.write = in[i].revents & POLLOUT;
-            fd.error = in[i].revents & POLLERR || in[i].revents & POLLHUP;
+            fd.read = (in[i].revents & (POLLIN | POLLRDHUP)) != 0;
+            fd.write = (in[i].revents & POLLOUT) != 0;
+            fd.error = (in[i].revents & (POLLERR | POLLHUP)) != 0;
         }
 
         return status;
@@ -387,9 +351,9 @@ namespace minerva
             return status;
         }
 
-        read = ps.revents & POLLIN || ps.revents & POLLRDHUP;
-        write = ps.revents & POLLOUT;
-        error = ps.revents & POLLERR || ps.revents & POLLHUP;
+        read = (ps.revents & (POLLIN | POLLRDHUP)) != 0;
+        write = (ps.revents & POLLOUT) != 0;
+        error = (ps.revents & (POLLERR | POLLHUP)) != 0;
 
         return status;
     }
@@ -403,15 +367,23 @@ namespace minerva
             read = 0;
             return CONNECTION_OK;
         }
-        
-        ssize_t r = recv(socket, buf, length, 0);
-        // would block
+
+        ssize_t r;
+        do {
+            r = recv(socket, buf, length, 0);
+        } while (r < 0 && errno == EINTR);
+
         if (r < 0)
         {
             read = 0;
-            if (errno == EAGAIN)
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 return CONNECTION_WANTS_READ;
+            }
+            else if (errno == ECONNRESET || errno == ENOTCONN ||
+                     errno == EPIPE)
+            {
+                return CONNECTION_CLOSED;
             }
             else
             {
@@ -425,7 +397,7 @@ namespace minerva
             read = 0;
             return CONNECTION_CLOSED;
         }
-        
+
         // r > 0: successful read
         read = r;
         last_read = std::chrono::steady_clock::now();
@@ -435,21 +407,24 @@ namespace minerva
     connection::CONNECTION_STATUS connection::write(const char* buf, size_t length,
                                                     ssize_t & written)
     {
-        ssize_t w = send(socket, buf, length, 0);
+        // MSG_NOSIGNAL prevents SIGPIPE if the peer has closed the read side.
+        ssize_t w;
+        do {
+            w = send(socket, buf, length, MSG_NOSIGNAL);
+        } while (w < 0 && errno == EINTR);
+
         if (w < 0)
         {
             written = 0;
-            // would block
-            if (errno == EAGAIN)
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 return CONNECTION_WANTS_WRITE;
             }
-            // connection closed
-            else if (errno == EPIPE)
+            else if (errno == EPIPE || errno == ECONNRESET ||
+                     errno == ENOTCONN)
             {
                 return CONNECTION_CLOSED;
             }
-            // socket error
             else
             {
                 LOG_DEBUG_ERRNO("send error on fd " << socket, errno);

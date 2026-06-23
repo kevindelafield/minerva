@@ -11,35 +11,26 @@ namespace minerva
     {
         switch (code)
         {
-        case HTTP_RETCODE_UNAUTHORIZED:
-            return HTTP_RETDESC_UNAUTHORIZED;
-        case HTTP_RETCODE_SUCCESS:
-            return HTTP_RETDESC_SUCCESS;
-        case HTTP_RETCODE_CREATED:
-            return HTTP_RETDESC_CREATED;
-        case HTTP_RETCODE_NO_CONTENT:
-            return HTTP_RETDESC_NO_CONTENT;
-        case HTTP_RETCODE_NOT_MODIFIED:
-            return HTTP_RETDESC_NOT_MODIFIED;
-        case HTTP_RETCODE_CONFLICT:
-            return HTTP_RETDESC_CONFLICT;
-        case HTTP_RETCODE_BAD_REQUEST:
-            return HTTP_RETDESC_BAD_REQUEST;
-        case HTTP_RETCODE_FORBIDDEN:
-            return HTTP_RETDESC_FORBIDDEN;
-        case HTTP_RETCODE_NOT_FOUND:
-            return HTTP_RETDESC_NOT_FOUND;
-        case HTTP_RETCODE_INT_SERVER_ERR:
-            return HTTP_RETDESC_INT_SERVER_ERR;
-        case HTTP_RETCODE_NOT_IMPLEMENTED:
-            return HTTP_RETDESC_NOT_IMPLEMENTED;
-        case HTTP_RETCODE_UNAVAILABLE:
-            return HTTP_RETDESC_UNAVAILABLE;
-        case HTTP_RETCODE_VER_NOT_SUPPORTED:
-            return HTTP_RETDESC_VER_NOT_SUPPORTED;
-        default:
-            return HTTP_RETDESC_INT_SERVER_ERR;
+        case HTTP_RETCODE_SUCCESS:           return "Success";
+        case HTTP_RETCODE_CREATED:           return "Resource created";
+        case HTTP_RETCODE_NO_CONTENT:        return "No content";
+        case HTTP_RETCODE_NOT_MODIFIED:      return "Not modified";
+        case HTTP_RETCODE_BAD_REQUEST:       return "Bad request";
+        case HTTP_RETCODE_UNAUTHORIZED:      return "Unauthorized";
+        case HTTP_RETCODE_FORBIDDEN:         return "Forbidden";
+        case HTTP_RETCODE_NOT_FOUND:         return "Not Found";
+        case HTTP_RETCODE_METHOD_DENIED:     return "Method Not Allowed";
+        case HTTP_RETCODE_CONFLICT:          return "Conflict";
+        case HTTP_RETCODE_GONE:              return "Gone";
+        case HTTP_RETCODE_LENGTH_REQ:        return "Length Required";
+        case HTTP_RETCODE_REQ_TOO_LARGE:     return "Request Too Large";
+        case HTTP_RETCODE_URI_TOO_LONG:      return "Request URI Too Long";
+        case HTTP_RETCODE_INT_SERVER_ERR:    return "Internal Server Error";
+        case HTTP_RETCODE_NOT_IMPLEMENTED:   return "Not Implemented";
+        case HTTP_RETCODE_UNAVAILABLE:       return "Service Unavailable";
+        case HTTP_RETCODE_VER_NOT_SUPPORTED: return "HTTP Version Not Supported";
         }
+        return "Internal Server Error";
     }
 
     constexpr static size_t BUFFER_SIZE = 15*1024;
@@ -79,13 +70,13 @@ namespace minerva
                 ssize_t left = to_read - total;
                 ssize_t sent;
 
-                if (m_ctx->should_shutdown())
+                if (m_ctx.should_shutdown())
                 {
                     return false;
                 }
 
                 // check for aggregate timeout
-                if (m_ctx->timed_out())
+                if (m_ctx.timed_out())
                 {
                     LOG_DEBUG("Socket write timeout");
                     return false;
@@ -95,8 +86,8 @@ namespace minerva
                 bool write_flag = true;
                 bool error_flag = writing;
 
-                int poll_status = 
-                    m_ctx->conn()->poll(read_flag, write_flag, error_flag,
+                int poll_status =
+                    m_ctx.conn()->poll(read_flag, write_flag, error_flag,
                                        500);
 
                 if (poll_status < 0)
@@ -115,7 +106,7 @@ namespace minerva
                     return false;
                 }
 
-                auto status = m_ctx->conn()->write(buf + total, left, sent);
+                auto status = m_ctx.conn()->write(buf + total, left, sent);
                 switch (status)
                 {
                 case connection::CONNECTION_ERROR:
@@ -163,7 +154,7 @@ namespace minerva
 
         std::stringstream os;
 
-        auto content_length = m_ctx->response().response_stream().tellp();
+        auto content_length = m_ctx.response().response_stream().tellp();
         // handle unwritten stream
         if (content_length < 0)
         {
@@ -208,7 +199,7 @@ namespace minerva
             }
             os << CRLF;
         }
-        if (m_ctx->request().keep_alive())
+        if (m_ctx.request().keep_alive())
         {
             os << "Connection: keep-alive";
         }

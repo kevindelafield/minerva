@@ -34,9 +34,7 @@ namespace minerva
             case PROTOCOL::HTTP:
                 return std::make_shared<connection>(socket);
             case PROTOCOL::HTTPS:
-                return std::shared_ptr<connection>(
-                    static_cast<connection*>(new ssl_connection(socket))
-                );
+                return std::make_shared<ssl_connection>(socket);
             default:
                 LOG_ERROR("Invalid HTTP protocol: " << static_cast<int>(protocol));
                 return nullptr;
@@ -49,9 +47,7 @@ namespace minerva
             case PROTOCOL::HTTP:
                 return std::make_shared<connection>(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
             case PROTOCOL::HTTPS:
-                return std::shared_ptr<connection>(
-                    static_cast<connection*>(new ssl_connection(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0))
-                );
+                return std::make_shared<ssl_connection>(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
             default:
                 LOG_ERROR("Invalid HTTP protocol: " << static_cast<int>(protocol));
                 return nullptr;
@@ -62,20 +58,20 @@ namespace minerva
                                     controller * controller)
     {
         LOG_DEBUG("Registering controller " << path.c_str());
-        std::unique_lock<std::mutex> lk(lock);
+        std::unique_lock<std::shared_mutex> lk(m_controller_lock);
         controller_map[path] = controller;
     }
 
     void httpd::register_default_controller(controller * controller)
     {
         LOG_DEBUG("Registering default controller");
-        std::unique_lock<std::mutex> lk(lock);
+        std::unique_lock<std::shared_mutex> lk(m_controller_lock);
         m_default_controller = controller;
     }
 
     controller * httpd::get_default_controller()
     {
-        std::unique_lock<std::mutex> lk(lock);
+        std::shared_lock<std::shared_mutex> lk(m_controller_lock);
         return m_default_controller;
     }
 
@@ -128,23 +124,28 @@ namespace minerva
             auto conn = create_listener_connection(listener.protocol);
             if (!conn)
             {
-                LOG_ERROR("Failed to create listener connection");
+                LOG_ERROR("Failed to create listener connection for port "
+                          << listener.port);
                 continue;
             }
 
-            assert(conn);
-
             if (!conn->reuse_addr(true))
             {
-                FATAL_ERRNO("Failed to reuse address", errno);
+                LOG_ERROR_ERRNO("Failed to reuse address on port "
+                                << listener.port, errno);
+                continue;
             }
             if (!conn->reuse_addr6(true))
             {
-                FATAL_ERRNO("Failed to reuse address 6", errno);
+                LOG_ERROR_ERRNO("Failed to reuse address 6 on port "
+                                << listener.port, errno);
+                continue;
             }
             if (!conn->ipv6_only(false))
             {
-                FATAL_ERRNO("Failed to set ipv6 only", errno);
+                LOG_ERROR_ERRNO("Failed to set ipv6 only on port "
+                                << listener.port, errno);
+                continue;
             }
 
 
@@ -155,14 +156,18 @@ namespace minerva
             addr.sin6_family = AF_INET6;
             addr.sin6_addr = any6addr;
             addr.sin6_port = htons(listener.port);
-    
+
             if (!conn->bind((const sockaddr *)&addr, sizeof(addr)))
             {
-                FATAL_ERRNO("Failed to bind to port " << listener.port, errno);
+                LOG_ERROR_ERRNO("Failed to bind to port " << listener.port,
+                                errno);
+                continue;
             }
             if (!conn->listen(max_queued_connections))
             {
-                FATAL_ERRNO("Listen failed for port " << listener.port, errno);
+                LOG_ERROR_ERRNO("Listen failed for port " << listener.port,
+                                errno);
+                continue;
             }
 
             listener.conn = conn;
@@ -289,9 +294,9 @@ namespace minerva
 
     bool httpd::shutdown(std::shared_ptr<connection> conn)
     {
-        timer timer;
+        timer t;
 
-        while (!should_shutdown() && timer.get_elapsed_milliseconds() < 15000)
+        while (!should_shutdown() && t.get_elapsed_milliseconds() < 15000)
         {
             bool reading = false;
 
@@ -331,8 +336,8 @@ namespace minerva
             bool error_flag = true;
 
             int err = 0;
-            while (err == 0 && !should_shutdown() && 
-                   timer.get_elapsed_milliseconds() < 15000)
+            while (err == 0 && !should_shutdown() &&
+                   t.get_elapsed_milliseconds() < 15000)
             {
                 err = conn->poll(read_flag, write_flag, error_flag, 100);
             }
@@ -350,18 +355,18 @@ namespace minerva
     {
         while (!should_shutdown())
         {
-            // Local snapshot of the map keyed by connection identity.  We
-            // also build a parallel fd->connection lookup so the poll loop
+            // Local snapshot of the map keyed by connection identity. We
+            // also build a parallel fd->shared_ptr lookup so the poll loop
             // can route revents back to the right entry without trusting
             // the (potentially recycled) fd value.
-            std::map<connection *,
+            std::map<std::shared_ptr<connection>,
                      std::tuple<std::shared_ptr<connection>,
                                 struct sockaddr_storage,
                                 socklen_t>> map;
             std::vector<connection::shared_poll_fd> fds;
             std::vector<std::shared_ptr<connection>> to_close;
-            std::map<int, connection *> fd_to_conn;
-            
+            std::map<int, std::shared_ptr<connection>> fd_to_conn;
+
             // wait for sockets or a shutdown
             {
                 std::unique_lock<std::mutex> lk(lock);
@@ -376,7 +381,7 @@ namespace minerva
 
                 // timeout anything older than 90 seconds
 
-                std::vector<connection *> to_erase;
+                std::vector<std::shared_ptr<connection>> to_erase;
 
                 for (auto it = m_socket_map.begin();
                      it != m_socket_map.end();
@@ -389,14 +394,14 @@ namespace minerva
                     {
                         LOG_DEBUG("shutting down idle connection: " <<
                                   conn->get_socket());
-                        
+
                         to_close.emplace_back(conn);
-                        
+
                         to_erase.emplace_back(it->first);
                     }
                 }
 
-                for (auto * key : to_erase)
+                for (auto & key : to_erase)
                 {
                     m_socket_map.erase(key);
                 }
@@ -436,10 +441,10 @@ namespace minerva
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 continue;
             }
-            
+
             {
                 std::unique_lock<std::mutex> lk(lock);
-                
+
                 // handle any poll notices
                 for (auto & it : fds)
                 {
@@ -448,7 +453,7 @@ namespace minerva
                     {
                         continue;
                     }
-                    connection * key = fd_it->second;
+                    std::shared_ptr<connection> key = fd_it->second;
                     auto map_it = map.find(key);
                     if (map_it == map.end())
                     {
@@ -466,19 +471,19 @@ namespace minerva
                         auto socket = std::get<0>(to_send);
 
                         m_socket_map.erase(key);
-                        
+
                         bool available;
-                        bool success = 
+                        bool success =
                             socket->data_available(available);
                         if (success && available)
                         {
                             // queue up request
                             LOG_DEBUG("dispatching keep alive connection: " <<
                                       socket->get_socket());
-                        
+
                             handler_thread_pool->queue_work_item([this, to_send] () {
                                     struct sockaddr_storage addr = std::get<1>(to_send);
-                                    
+
                                     this->handle_request(std::get<0>(to_send),
                                                          addr,
                                                          std::get<2>(to_send));
@@ -512,7 +517,7 @@ namespace minerva
         LOG_DEBUG("put back: " << conn->get_socket());
 
         std::unique_lock<std::mutex> lk(lock);
-        m_socket_map[conn.get()] = 
+        m_socket_map[conn] =
             std::make_tuple(conn, addr, addr_len);
         cond.notify_all();
     }
@@ -632,12 +637,12 @@ namespace minerva
 
     bool httpd::accept(std::shared_ptr<connection> conn)
     {
-        timer timer;
+        timer t;
         bool accepted = false;
         bool done = false;
         while (!done &&
                !should_shutdown() &&
-               timer.get_elapsed_milliseconds() < 20000)
+               t.get_elapsed_milliseconds() < 20000)
         {
             LOG_DEBUG("ssl accepting...");
             auto ssl_status = conn->accept_ssl();
@@ -788,15 +793,10 @@ namespace minerva
         // add date header
         {
             time_t tt;
-            
             time(&tt);
-            
-            struct tm tm;
-            
-            gmtime_r(&tt, &tm);
-            
+            struct tm tm = minerva::gmtime(tt);
+
             char tmp_date[200];
-            
             strftime(tmp_date, sizeof(tmp_date),
                      "%a, %d %b %Y %H:%M:%S GMT", &tm);
             tmp_date[sizeof(tmp_date) - 1] = 0;
@@ -979,7 +979,7 @@ namespace minerva
             {
                 // find the controller
                 LOG_DEBUG("Looking for controller " << root);
-                std::unique_lock<std::mutex> lk(lock);
+                std::shared_lock<std::shared_mutex> lk(m_controller_lock);
                 auto it = controller_map.find(root);
                 if (it != controller_map.end())
                 {
@@ -996,47 +996,16 @@ namespace minerva
             if (!controller)
             {
                 std::string user;
-                if (!authenticate(ctx, user))
+                auto code = authenticate(ctx, user)
+                    ? http_response::http_response_code::HTTP_RETCODE_NOT_FOUND
+                    : http_response::http_response_code::HTTP_RETCODE_UNAUTHORIZED;
+                if (code == http_response::http_response_code::HTTP_RETCODE_NOT_FOUND)
                 {
-                    if (ctx.request().continue_100() && 
-                        !ctx.request().has_overflow())
-                    {
-                        ctx.response().status_code(http_response::http_response_code::HTTP_RETCODE_UNAUTHORIZED);
-                    }
-                    else
-                    {
-                        if (ctx.request().null_body_read())
-                        {
-                            ctx.response().status_code(http_response::http_response_code::HTTP_RETCODE_UNAUTHORIZED);
-                        }
-                        else
-                        {
-                            abrt = true;
-                            LOG_WARN("Failed to read body");
-                        }
-                    }
+                    LOG_DEBUG("Failed to find controller");
                 }
-                else
+                if (!finalize_error_response(ctx, code))
                 {
-                    if (ctx.request().continue_100() &&
-                        !ctx.request().has_overflow())
-                    {
-                        ctx.response().status_code(http_response::http_response_code::HTTP_RETCODE_NOT_FOUND);
-                    }
-                    else
-                    {
-                        // controller not found
-                        LOG_DEBUG("Failed to find controller");
-                        if (ctx.request().null_body_read())
-                        {
-                            ctx.response().status_code(http_response::http_response_code::HTTP_RETCODE_NOT_FOUND);
-                        }
-                        else
-                        {
-                            abrt = true;
-                            LOG_WARN("Failed to read body");
-                        }
-                    }
+                    abrt = true;
                 }
             }
             
@@ -1056,22 +1025,9 @@ namespace minerva
                                  user << " " <<
                                  ctx.request().method_as_string() << " " <<
                                  ctx.request().path());
-                    if (ctx.request().continue_100() &&
-                        !ctx.request().has_overflow())
+                    if (!finalize_error_response(ctx, http_response::http_response_code::HTTP_RETCODE_UNAUTHORIZED))
                     {
-                        ctx.response().status_code(http_response::http_response_code::HTTP_RETCODE_UNAUTHORIZED);
-                    }
-                    else
-                    {
-                        if (ctx.request().null_body_read())
-                        {
-                            ctx.response().status_code(http_response::http_response_code::HTTP_RETCODE_UNAUTHORIZED);
-                        }
-                        else
-                        {
-                            abrt = true;
-                            LOG_WARN("Failed to read body");
-                        }
+                        abrt = true;
                     }
                 }
                 else
@@ -1112,13 +1068,8 @@ namespace minerva
                         catch (std::exception & e)
                         {
                             LOG_ERROR("std exception: " << e.what());
-                            if (ctx.request().null_body_read())
+                            if (!finalize_error_response(ctx, http_response::http_response_code::HTTP_RETCODE_INT_SERVER_ERR))
                             {
-                                ctx.response().status_code(http_response::http_response_code::HTTP_RETCODE_INT_SERVER_ERR);
-                            }
-                            else
-                            {
-                                LOG_WARN("failed to read full body");
                                 abrt = true;
                             }
                         }
@@ -1252,6 +1203,26 @@ namespace minerva
         {
             os << i << std::endl;
         }
+    }
+
+    bool httpd::finalize_error_response(http_context & ctx,
+                                        http_response::http_response_code code)
+    {
+        auto & req = ctx.request();
+        // If the client said "Expect: 100-continue" and hasn't started
+        // sending the body, we can respond immediately without draining.
+        if (req.continue_100() && !req.has_overflow())
+        {
+            ctx.response().status_code(code);
+            return true;
+        }
+        if (req.null_body_read())
+        {
+            ctx.response().status_code(code);
+            return true;
+        }
+        LOG_WARN("Failed to read body");
+        return false;
     }
 
     bool httpd::write_100_continue_header(http_context & ctx)

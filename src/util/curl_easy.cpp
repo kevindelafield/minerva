@@ -25,43 +25,6 @@ namespace minerva
             return res;                                                 \
         }                                                               \
     }
-    
-#define GET_CURLINFO_OR_FAIL(option, param) {                           \
-        auto res = curl_easy_getinfo(this->curl, option, &param);       \
-        if (res != CURLE_OK)                                            \
-        {                                                               \
-            LOG_WARN("curl_easy_setopt failed for " << #option << ": " << res); \
-            return res;                                                 \
-        }                                                               \
-    }
-    
-    CURLcode curl_easy::get_statistics(request_statistics & stats)
-    {
-        curl_off_t total_offset;
-        GET_CURLINFO_OR_FAIL(CURLINFO_TOTAL_TIME_T, total_offset);
-        curl_off_t dns_offset;
-        GET_CURLINFO_OR_FAIL(CURLINFO_NAMELOOKUP_TIME_T, dns_offset);
-        curl_off_t connect_offset;
-        GET_CURLINFO_OR_FAIL(CURLINFO_CONNECT_TIME_T, connect_offset);
-        curl_off_t ssl_offset;
-        GET_CURLINFO_OR_FAIL(CURLINFO_APPCONNECT_TIME_T, ssl_offset);
-        curl_off_t send_offset;
-        GET_CURLINFO_OR_FAIL(CURLINFO_STARTTRANSFER_TIME_T, send_offset);
-
-        stats.mTotal = static_cast<long long>(total_offset);
-        stats.mGetHostAddrTotal = 
-            static_cast<long long>(dns_offset);
-        stats.mConnectTotal = 
-            static_cast<long long>(connect_offset - dns_offset);
-        stats.mSSLConnectTotal = 
-            static_cast<long long>(ssl_offset - connect_offset);
-        stats.mSendTotal = 
-            static_cast<long long>(send_offset - ssl_offset);
-        stats.mResponseTotal = 
-            static_cast<long long>(total_offset - send_offset);
-
-        return CURLE_OK;
-    }
 
     size_t curl_easy::read_stream_function(char* buffer, size_t size, size_t nItems, void* userData)
     {
@@ -331,36 +294,52 @@ namespace minerva
         return CURLE_OK;
     }
 
-    CURLcode curl_easy::post(const slist & headers, 
-                             const std::string & body, 
-                             http_response & response)
+    CURLcode curl_easy::prepare_request()
     {
         FAIL_IF_NOT_INITIALIZED();
 
-        // Clear response streams to prevent accumulation between requests
+        // Clear response streams to prevent accumulation between requests.
         this->responseHeaderStream.str("");
         this->responseHeaderStream.clear();
         this->responseBodyStream.str("");
         this->responseBodyStream.clear();
 
-        ReadBuffer readBuffer = { body.length(), 0, body.c_str() };
-
         if (!this->userAgent.empty())
         {
             SET_CURLOPT_OR_FAIL(CURLOPT_USERAGENT, this->userAgent.c_str());
         }
+        return CURLE_OK;
+    }
+
+    CURLcode curl_easy::perform_with_body(const slist & headers,
+                                          const char * body,
+                                          size_t body_len,
+                                          const char * customMethod,
+                                          http_response & response)
+    {
+        auto pre = this->prepare_request();
+        if (pre != CURLE_OK) return pre;
+
+        ReadBuffer readBuffer = { body_len, 0, body };
+
+        // POST with a body.  When customMethod is non-null it overrides
+        // the wire verb (e.g. "PUT" or "DELETE") while keeping the same
+        // upload mechanics.
         SET_CURLOPT_OR_FAIL(CURLOPT_POST, 1L);
         SET_CURLOPT_OR_FAIL(CURLOPT_READDATA, &readBuffer);
         SET_CURLOPT_OR_FAIL(CURLOPT_READFUNCTION, read_stream_function);
         SET_CURLOPT_OR_FAIL(CURLOPT_SEEKDATA, &readBuffer);
         SET_CURLOPT_OR_FAIL(CURLOPT_SEEKFUNCTION, seek_stream_function);
-
-        SET_CURLOPT_OR_FAIL(CURLOPT_POSTFIELDSIZE_LARGE, 
-                            static_cast<long>(body.length()));
-
+        SET_CURLOPT_OR_FAIL(CURLOPT_POSTFIELDSIZE_LARGE,
+                            static_cast<curl_off_t>(body_len));
         SET_CURLOPT_OR_FAIL(CURLOPT_HTTPHEADER, headers.get_slist());
+        SET_CURLOPT_OR_FAIL(CURLOPT_CUSTOMREQUEST, customMethod);
 
         const auto res = curl_easy_perform(this->curl);
+
+        // Reset CUSTOMREQUEST so a subsequent call on this handle is not
+        // accidentally biased by this verb override.
+        curl_easy_setopt(this->curl, CURLOPT_CUSTOMREQUEST, nullptr);
 
         if (res != CURLE_OK)
         {
@@ -370,48 +349,26 @@ namespace minerva
 
         long code = 0;
         curl_easy_getinfo(this->curl, CURLINFO_RESPONSE_CODE, &code);
-        response.set_response(static_cast<unsigned short int>(code), 
-                              this->responseHeaderStream.str(), 
+        response.set_response(static_cast<unsigned short int>(code),
+                              this->responseHeaderStream.str(),
                               this->responseBodyStream.str());
-
         return res;
     }
 
-    CURLcode curl_easy::post(const slist & headers, 
-                             const std::vector<unsigned char> & body, 
-                             http_response & response)
+    CURLcode curl_easy::perform_no_body(const slist & headers,
+                                        const char * customMethod,
+                                        http_response & response)
     {
-        FAIL_IF_NOT_INITIALIZED();
+        auto pre = this->prepare_request();
+        if (pre != CURLE_OK) return pre;
 
-        // Clear response streams to prevent accumulation between requests
-        this->responseHeaderStream.str("");
-        this->responseHeaderStream.clear();
-        this->responseBodyStream.str("");
-        this->responseBodyStream.clear();
-
-        ReadBuffer readBuffer = 
-            { 
-                body.size(), 
-                0, 
-                reinterpret_cast<const char *>(body.data())
-            };
-
-        if (!this->userAgent.empty())
-        {
-            SET_CURLOPT_OR_FAIL(CURLOPT_USERAGENT, this->userAgent.c_str());
-        }
-        SET_CURLOPT_OR_FAIL(CURLOPT_POST, 1L);
-        SET_CURLOPT_OR_FAIL(CURLOPT_READDATA, &readBuffer);
-        SET_CURLOPT_OR_FAIL(CURLOPT_READFUNCTION, read_stream_function);
-        SET_CURLOPT_OR_FAIL(CURLOPT_SEEKDATA, &readBuffer);
-        SET_CURLOPT_OR_FAIL(CURLOPT_SEEKFUNCTION, seek_stream_function);
-
-        SET_CURLOPT_OR_FAIL(CURLOPT_POSTFIELDSIZE_LARGE, 
-                            static_cast<long>(body.size()));
-
+        SET_CURLOPT_OR_FAIL(CURLOPT_HTTPGET, 1L);
         SET_CURLOPT_OR_FAIL(CURLOPT_HTTPHEADER, headers.get_slist());
+        SET_CURLOPT_OR_FAIL(CURLOPT_CUSTOMREQUEST, customMethod);
 
         const auto res = curl_easy_perform(this->curl);
+
+        curl_easy_setopt(this->curl, CURLOPT_CUSTOMREQUEST, nullptr);
 
         if (res != CURLE_OK)
         {
@@ -421,44 +378,73 @@ namespace minerva
 
         long code = 0;
         curl_easy_getinfo(this->curl, CURLINFO_RESPONSE_CODE, &code);
-        response.set_response(static_cast<unsigned short int>(code), 
-                              this->responseHeaderStream.str(), 
+        response.set_response(static_cast<unsigned short int>(code),
+                              this->responseHeaderStream.str(),
                               this->responseBodyStream.str());
-
         return res;
+    }
+
+    CURLcode curl_easy::post(const slist & headers,
+                             const std::string & body,
+                             http_response & response)
+    {
+        return this->perform_with_body(headers, body.c_str(), body.length(),
+                                       nullptr, response);
+    }
+
+    CURLcode curl_easy::post(const slist & headers,
+                             const std::vector<unsigned char> & body,
+                             http_response & response)
+    {
+        return this->perform_with_body(headers,
+                                       reinterpret_cast<const char *>(body.data()),
+                                       body.size(),
+                                       nullptr, response);
+    }
+
+    CURLcode curl_easy::put(const slist & headers,
+                            const std::string & body,
+                            http_response & response)
+    {
+        return this->perform_with_body(headers, body.c_str(), body.length(),
+                                       "PUT", response);
+    }
+
+    CURLcode curl_easy::put(const slist & headers,
+                            const std::vector<unsigned char> & body,
+                            http_response & response)
+    {
+        return this->perform_with_body(headers,
+                                       reinterpret_cast<const char *>(body.data()),
+                                       body.size(),
+                                       "PUT", response);
+    }
+
+    CURLcode curl_easy::del(const slist & headers, http_response & response)
+    {
+        return this->perform_no_body(headers, "DELETE", response);
+    }
+
+    CURLcode curl_easy::del(const slist & headers,
+                            const std::string & body,
+                            http_response & response)
+    {
+        return this->perform_with_body(headers, body.c_str(), body.length(),
+                                       "DELETE", response);
+    }
+
+    CURLcode curl_easy::del(const slist & headers,
+                            const std::vector<unsigned char> & body,
+                            http_response & response)
+    {
+        return this->perform_with_body(headers,
+                                       reinterpret_cast<const char *>(body.data()),
+                                       body.size(),
+                                       "DELETE", response);
     }
 
     CURLcode curl_easy::get(const slist & headers, http_response & response)
     {
-        FAIL_IF_NOT_INITIALIZED();
-
-        // Clear response streams to prevent accumulation between requests
-        this->responseHeaderStream.str("");
-        this->responseHeaderStream.clear();
-        this->responseBodyStream.str("");
-        this->responseBodyStream.clear();
-
-        if (!this->userAgent.empty())
-        {
-            SET_CURLOPT_OR_FAIL(CURLOPT_USERAGENT, this->userAgent.c_str());
-        }
-        SET_CURLOPT_OR_FAIL(CURLOPT_HTTPGET, 1L);
-        SET_CURLOPT_OR_FAIL(CURLOPT_HTTPHEADER, headers.get_slist());
-
-        const auto res = curl_easy_perform(this->curl);
-
-        if (res != CURLE_OK)
-        {
-            LOG_WARN("curl_easy_perform failed: " << res << " - " <<
-                     this->get_last_error());
-        }
-
-        long code = 0;
-        curl_easy_getinfo(this->curl, CURLINFO_RESPONSE_CODE, &code);
-        response.set_response(static_cast<unsigned short int>(code), 
-                              this->responseHeaderStream.str(), 
-                              this->responseBodyStream.str());
-
-        return res;
+        return this->perform_no_body(headers, nullptr, response);
     }
 }

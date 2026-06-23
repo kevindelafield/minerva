@@ -1,103 +1,84 @@
-#include <chrono>
-#include <sstream>
-#include <ctime>
+#include <cstring>
 #include "time_utils.h"
 
 namespace minerva
 {
-
-    std::string ctime(const std::time_t & time)    
+    std::string ctime(const std::time_t& time)
     {
-        char buf[30];
-        std::stringstream ss(ctime_r(&time, buf));
-        std::string ts;
-        std::getline(ss, ts);
-        return ts;
+        // ctime_r writes a 26-byte string ending in "\n\0".
+        char buf[26];
+        if (!ctime_r(&time, buf))
+        {
+            return {};
+        }
+        std::string s(buf);
+        if (!s.empty() && s.back() == '\n')
+        {
+            s.pop_back();
+        }
+        return s;
     }
 
-    std::tm localtime(const std::time_t & time)
+    std::tm localtime(const std::time_t& time)
     {
-        std::tm tm;
-        localtime_r(&time, &tm);
+        std::tm tm{};
+        if (!localtime_r(&time, &tm))
+        {
+            // tm is already zero-initialized.
+        }
         return tm;
     }
 
-    std::tm gmtime(const std::time_t & time)
+    std::tm gmtime(const std::time_t& time)
     {
-        std::tm tm;
-        gmtime_r(&time, &tm);
+        std::tm tm{};
+        if (!gmtime_r(&time, &tm))
+        {
+            // tm is already zero-initialized.
+        }
         return tm;
     }
 
-    timer::timer() : m_is_running(true)
+    timer::timer()
+        : start_time(get_time_now()), m_is_running(true)
     {
-        start_time = get_time_now();
     }
-
 
     void timer::start()
     {
         m_is_running = true;
-        start_time = get_time_now();
+        start_time   = get_time_now();
     }
-
 
     void timer::stop()
     {
+        if (!m_is_running) return;       // idempotent
+        stop_time    = get_time_now();
         m_is_running = false;
-        stop_time = get_time_now();
     }
-
 
     void timer::reset() noexcept
     {
         m_is_running = false;
-        start_time = time_point();
-        stop_time = time_point();
+        start_time   = time_point();
+        stop_time    = time_point();
     }
-
 
     double timer::get_elapsed_time() const
     {
-        std::chrono::duration<double> elapsedSeconds{};
-
-        if (m_is_running)
-        {
-            elapsedSeconds = get_time_now() - start_time;
-        }
-        else
-        {
-            elapsedSeconds = stop_time - start_time;
-        }
-        return elapsedSeconds.count();
+        const auto end = m_is_running ? get_time_now() : stop_time;
+        return std::chrono::duration<double>(end - start_time).count();
     }
 
     long long timer::get_elapsed_milliseconds() const
     {
-        std::chrono::duration<long long, std::milli> elapsedSeconds{};
-
-        if (m_is_running)
-        {
-            elapsedSeconds = 
-                std::chrono::duration_cast<std::chrono::milliseconds>(get_time_now() - start_time);
-        }
-        else
-        {
-            elapsedSeconds = 
-                std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time);
-        }
-        return elapsedSeconds.count();
+        const auto end = m_is_running ? get_time_now() : stop_time;
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            end - start_time).count();
     }
 
     timer::time_point timer::get_time_now()
     {
         return std::chrono::steady_clock::now();
     }
-
-
-    bool timer::is_running()
-    {
-        return this->m_is_running;
-    }
-
 }

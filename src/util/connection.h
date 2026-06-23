@@ -33,13 +33,14 @@ namespace minerva
         connection(int family, int socktype, int protocol);
         virtual ~connection();
 
-        connection(const connection & conn);
+        // Move-only: a connection owns a single fd; copying via dup() would
+        // give two objects independent overflow buffers and timestamps for
+        // the same TCP stream, which is never what callers want.
+        connection(const connection & conn) = delete;
+        connection & operator=(const connection & conn) = delete;
 
-        connection(connection && conn);
-
-        connection & operator=(const connection & conn);
-
-        connection & operator=(connection && conn);
+        connection(connection && conn) noexcept;
+        connection & operator=(connection && conn) noexcept;
 
         std::chrono::steady_clock::time_point last_read;
         std::chrono::steady_clock::time_point last_write;

@@ -20,43 +20,6 @@ namespace minerva
             https
         };
 
-        class request_statistics
-        {
-        public:
-           request_statistics() :
-                mTotal(0),
-                mGetHostAddrTotal(0),
-                mConnectTotal(0),
-                mSSLConnectTotal(0),
-                mSendTotal(0),
-                mResponseTotal(0)
-            {
-            }
-
-          request_statistics(const request_statistics & other) = default;
-
-          request_statistics & operator=(const request_statistics & other)
-          {
-              if (this != &other)
-              {
-                  mTotal = other.mTotal;
-                  mGetHostAddrTotal = other.mGetHostAddrTotal;
-                  mConnectTotal = other.mConnectTotal;
-                  mSSLConnectTotal = other.mSSLConnectTotal;
-                  mSendTotal = other.mSendTotal;
-                  mResponseTotal = other.mResponseTotal;
-              }
-             return *this;
-           }
-
-           long long mTotal;
-           long long mGetHostAddrTotal;
-           long long mConnectTotal;
-           long long mSSLConnectTotal;
-           long long mSendTotal;
-           long long mResponseTotal;
-        };
-
         class slist
         {
         public:
@@ -184,8 +147,6 @@ namespace minerva
 
         ~curl_easy() noexcept;
 
-        CURLcode get_statistics(request_statistics & status);
-
         void set_user_agent(const std::string & userAgent) 
         { 
             this->userAgent = userAgent; 
@@ -226,6 +187,28 @@ namespace minerva
         CURLcode post(const slist & headers, 
                       const std::vector<unsigned char> & body, 
                       http_response & response);
+
+        CURLcode put(const slist & headers,
+                     const std::string & body,
+                     http_response & response);
+
+        CURLcode put(const slist & headers,
+                     const std::vector<unsigned char> & body,
+                     http_response & response);
+
+        // DELETE with no body.
+        CURLcode del(const slist & headers, http_response & response);
+
+        // DELETE with a request body.  Some REST APIs accept this; many
+        // proxies and servers strip it, so prefer the no-body overload
+        // when possible.
+        CURLcode del(const slist & headers,
+                     const std::string & body,
+                     http_response & response);
+
+        CURLcode del(const slist & headers,
+                     const std::vector<unsigned char> & body,
+                     http_response & response);
 
         CURLcode get(const slist& headers, http_response & response);
 
@@ -269,5 +252,24 @@ namespace minerva
                                      size_t size, 
                                      size_t nItems, 
                                      void* userData);
+
+        // Common pre-perform setup shared by all verbs: clears response
+        // streams and sets the user agent if one was configured.
+        CURLcode prepare_request();
+
+        // Performs a request that uploads `body` of `body_len` bytes.
+        // `customMethod` selects the verb: nullptr means use the default
+        // POST behavior; otherwise it is set as CURLOPT_CUSTOMREQUEST
+        // (e.g. "PUT" or "DELETE").
+        CURLcode perform_with_body(const slist & headers,
+                                   const char * body,
+                                   size_t body_len,
+                                   const char * customMethod,
+                                   http_response & response);
+
+        // Performs a verb that does not upload a body (GET, DELETE).
+        CURLcode perform_no_body(const slist & headers,
+                                 const char * customMethod,
+                                 http_response & response);
     };
 }
