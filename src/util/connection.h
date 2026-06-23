@@ -51,6 +51,18 @@ namespace minerva
 
         virtual CONNECTION_STATUS write(const char* buf, size_t length, ssize_t & written);
 
+        // True when the connection already holds application-level data that
+        // can be read without touching the underlying socket.  For plain TCP
+        // there is no such buffer, but a TLS connection decrypts a whole
+        // record at once and may buffer surplus plaintext.  Callers must
+        // consult this before poll()ing the socket: the buffered plaintext
+        // will never make the fd readable, so a poll() would block until its
+        // timeout even though data is ready.
+        virtual bool pending() const
+        {
+            return false;
+        }
+
         class shared_poll_fd
         {
         public:
@@ -82,6 +94,9 @@ namespace minerva
         bool reuse_addr6(bool reuse);
 
         bool ipv6_only(bool only);
+
+        // Enable/disable Nagle's algorithm (TCP_NODELAY) on this socket.
+        bool no_delay(bool enable);
 
         bool bind(const struct sockaddr * addr, socklen_t len);
 

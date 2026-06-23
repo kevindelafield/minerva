@@ -630,6 +630,11 @@ namespace minerva
                 
                 // queue up request
                 auto conn = create_connection(s, http ? PROTOCOL::HTTP : PROTOCOL::HTTPS);
+
+                // Disable Nagle so small trailing segments (headers/body and,
+                // for TLS, each record) are not delayed by the peer's
+                // delayed-ACK timer.
+                conn->no_delay(true);
                 
                 schedule_job([this, conn, addr, addr_len]()
                              {

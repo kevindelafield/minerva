@@ -4,6 +4,10 @@
 #include <map>
 #include <string>
 
+// Forward declarations to avoid pulling OpenSSL headers into every includer.
+typedef struct ssl_st SSL;
+typedef struct ssl_ctx_st SSL_CTX;
+
 namespace minerva
 {
 
@@ -12,7 +16,9 @@ namespace minerva
     // that the basher can control framing (chunked vs content-length), produce
     // malformed requests, and reuse connections across requests.  The client
     // only handles connecting and parsing a single response (both chunked and
-    // content-length framed).
+    // content-length framed).  TLS (https) is supported when constructed with
+    // use_tls = true; certificate verification is intentionally disabled so the
+    // self-signed certs produced by tools/generate_cert.sh can be exercised.
     class http_client
     {
     public:
@@ -24,7 +30,13 @@ namespace minerva
             bool keep_alive = true;
         };
 
-        http_client(const std::string & host, int port, int timeout_ms);
+        // Initialize the shared client TLS context. Call once before creating
+        // any TLS http_client instances. Safe to call multiple times.
+        static bool tls_init();
+        static void tls_destroy();
+
+        http_client(const std::string & host, int port, int timeout_ms,
+                    bool use_tls = false);
         ~http_client();
 
         http_client(const http_client &) = delete;
@@ -50,10 +62,14 @@ namespace minerva
         bool read_line(std::string & line);
         bool read_n(std::string & out, size_t n);
 
+        static SSL_CTX * s_tls_ctx;
+
         std::string m_host;
         int m_port;
         int m_timeout_ms;
+        bool m_use_tls;
         int m_fd = -1;
+        SSL * m_ssl = nullptr;
         std::string m_inbuf;
         size_t m_pos = 0;
     };

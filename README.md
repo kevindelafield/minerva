@@ -55,10 +55,32 @@ disown
 
 `httptest` options:
 
-| option              | description                          | default |
-| ------------------- | ------------------------------------ | ------- |
-| `--port N`          | HTTP listen port                     | 8080    |
-| `--log-level L`     | log level 0 (none) .. 6 (fatal)      | 3       |
+| option              | description                          | default  |
+| ------------------- | ------------------------------------ | -------- |
+| `--port N`          | HTTP listen port (0 to disable)      | 8080     |
+| `--https-port N`    | HTTPS listen port (TLS)              | disabled |
+| `--cert FILE`       | TLS certificate file (PEM)           | —        |
+| `--key FILE`        | TLS private key file (PEM)           | —        |
+| `--log-level L`     | log level 0 (none) .. 6 (fatal)      | 3        |
+
+#### Enabling HTTPS
+
+Generate a self-signed certificate/key pair (CN=localhost) with the helper
+script, then point `httptest` at the resulting `cert.pem` / `key.pem`:
+
+```sh
+# from the build directory
+bash ../tools/generate_cert.sh        # writes cert.pem and key.pem
+
+# serve both HTTP and HTTPS at once
+setsid ./httptest/httptest --port 8099 --https-port 8443 \
+       --cert cert.pem --key key.pem --log-level 4 \
+       </dev/null >/tmp/httptest.log 2>&1 &
+disown
+```
+
+The certificate is self-signed, so TLS clients must skip verification
+(e.g. `curl -k`, or `basher --https`, which disables certificate checking).
 
 ### 3. Run a comprehensive test
 
@@ -80,6 +102,10 @@ randomizes request types, sizes, framing, methods, and connection reuse.
 # 60% connection reuse
 ./basher/basher --host 127.0.0.1 --port 8099 --threads 24 --count 50000 \
                 --fault-rate 0.1 --max-size 131072 --keepalive-rate 0.6 --seed 99
+
+# Over HTTPS: add --https to target the TLS listener (cert verification off)
+./basher/basher --host 127.0.0.1 --port 8443 --https --threads 8 --count 3000 \
+                --fault-rate 0.1 --seed 5
 ```
 
 `basher` options:
@@ -95,6 +121,7 @@ randomizes request types, sizes, framing, methods, and connection reuse.
 | `--max-size N`         | maximum body size in bytes                     | 65536       |
 | `--keepalive-rate F`   | probability 0..1 of reusing a connection       | 0.5         |
 | `--timeout N`          | per-request socket timeout in milliseconds     | 30000       |
+| `--https`              | connect with TLS (certificate verification off)| off         |
 
 At the end of a run `basher` prints a summary (requests sent, verified ok,
 mismatches, transport errors, status-code distribution, connection reuse,

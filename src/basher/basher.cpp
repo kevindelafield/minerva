@@ -30,6 +30,7 @@ namespace
         size_t max_size = 65536;
         double keepalive_rate = 0.5;
         int timeout_ms = 30000;
+        bool use_tls = false;
     };
 
     double uniform01(std::mt19937_64 & rng)
@@ -77,7 +78,7 @@ namespace
             if (!conn || !conn->is_open())
             {
                 conn = std::make_unique<http_client>(opt.host, opt.port,
-                                                     opt.timeout_ms);
+                                                     opt.timeout_ms, opt.use_tls);
                 if (!conn->open())
                 {
                     stats.errors.fetch_add(1);
@@ -185,7 +186,7 @@ namespace
     // After the run, confirm the server is still alive and serving correctly.
     bool liveness_check(const run_options & opt)
     {
-        http_client c(opt.host, opt.port, opt.timeout_ms);
+        http_client c(opt.host, opt.port, opt.timeout_ms, opt.use_tls);
         if (!c.open())
         {
             return false;
@@ -218,7 +219,8 @@ namespace
                 "  --fault-rate F      probability 0..1 of malformed requests (default 0)\n"
                 "  --max-size N        max body size in bytes (default 65536)\n"
                 "  --keepalive-rate F  probability 0..1 of connection reuse (default 0.5)\n"
-                "  --timeout N         per-request socket timeout ms (default 30000)\n");
+                "  --timeout N         per-request socket timeout ms (default 30000)\n"
+                "  --https             use TLS (certificate verification disabled)\n");
     }
 }
 
@@ -248,6 +250,7 @@ int main(int argc, char ** argv)
         else if (std::strcmp(argv[i], "--max-size") == 0) opt.max_size = static_cast<size_t>(std::strtoull(need("--max-size"), nullptr, 10));
         else if (std::strcmp(argv[i], "--keepalive-rate") == 0) opt.keepalive_rate = std::atof(need("--keepalive-rate"));
         else if (std::strcmp(argv[i], "--timeout") == 0) opt.timeout_ms = std::atoi(need("--timeout"));
+        else if (std::strcmp(argv[i], "--https") == 0) opt.use_tls = true;
         else
         {
             print_usage();
@@ -257,12 +260,18 @@ int main(int argc, char ** argv)
 
     if (opt.threads < 1) opt.threads = 1;
 
+    if (opt.use_tls && !http_client::tls_init())
+    {
+        fprintf(stderr, "failed to initialize TLS client context\n");
+        return 1;
+    }
+
     fprintf(stderr,
             "basher: host=%s port=%d threads=%d count=%llu fault-rate=%.3f "
-            "max-size=%zu keepalive-rate=%.3f\n",
+            "max-size=%zu keepalive-rate=%.3f tls=%s\n",
             opt.host.c_str(), opt.port, opt.threads,
             static_cast<unsigned long long>(opt.count), opt.fault_rate,
-            opt.max_size, opt.keepalive_rate);
+            opt.max_size, opt.keepalive_rate, opt.use_tls ? "yes" : "no");
 
     basher_stats stats;
     std::atomic<uint64_t> remaining{opt.count};
@@ -297,6 +306,11 @@ int main(int argc, char ** argv)
 
     bool failed = stats.failed() || !alive;
     std::cout << "result             : " << (failed ? "FAIL" : "PASS") << "\n";
+
+    if (opt.use_tls)
+    {
+        http_client::tls_destroy();
+    }
 
     return failed ? 1 : 0;
 }

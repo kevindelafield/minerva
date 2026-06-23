@@ -9,10 +9,44 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 #include "http_client.h"
 
 namespace minerva
 {
+
+    SSL_CTX * http_client::s_tls_ctx = nullptr;
+
+    bool http_client::tls_init()
+    {
+        if (s_tls_ctx)
+        {
+            return true;
+        }
+        SSL_library_init();
+        SSL_load_error_strings();
+        OpenSSL_add_all_algorithms();
+
+        s_tls_ctx = SSL_CTX_new(TLS_client_method());
+        if (!s_tls_ctx)
+        {
+            return false;
+        }
+        // Self-signed test certs: do not verify the peer certificate.
+        SSL_CTX_set_verify(s_tls_ctx, SSL_VERIFY_NONE, nullptr);
+        return true;
+    }
+
+    void http_client::tls_destroy()
+    {
+        if (s_tls_ctx)
+        {
+            SSL_CTX_free(s_tls_ctx);
+            s_tls_ctx = nullptr;
+        }
+    }
 
     static std::string to_lower(std::string s)
     {
@@ -28,8 +62,9 @@ namespace minerva
         return s.substr(a, b - a);
     }
 
-    http_client::http_client(const std::string & host, int port, int timeout_ms)
-        : m_host(host), m_port(port), m_timeout_ms(timeout_ms)
+    http_client::http_client(const std::string & host, int port, int timeout_ms,
+                             bool use_tls)
+        : m_host(host), m_port(port), m_timeout_ms(timeout_ms), m_use_tls(use_tls)
     {
     }
 
@@ -88,6 +123,31 @@ namespace minerva
             setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
         }
 
+        if (m_use_tls)
+        {
+            if (!s_tls_ctx)
+            {
+                ::close(fd);
+                return false;
+            }
+            m_ssl = SSL_new(s_tls_ctx);
+            if (!m_ssl)
+            {
+                ::close(fd);
+                return false;
+            }
+            // SNI so the server can select the right certificate.
+            SSL_set_tlsext_host_name(m_ssl, m_host.c_str());
+            SSL_set_fd(m_ssl, fd);
+            if (SSL_connect(m_ssl) != 1)
+            {
+                SSL_free(m_ssl);
+                m_ssl = nullptr;
+                ::close(fd);
+                return false;
+            }
+        }
+
         m_fd = fd;
         m_inbuf.clear();
         m_pos = 0;
@@ -96,6 +156,12 @@ namespace minerva
 
     void http_client::close()
     {
+        if (m_ssl)
+        {
+            SSL_shutdown(m_ssl);
+            SSL_free(m_ssl);
+            m_ssl = nullptr;
+        }
         if (m_fd >= 0)
         {
             ::close(m_fd);
@@ -110,7 +176,15 @@ namespace minerva
         size_t off = 0;
         while (off < len)
         {
-            ssize_t n = ::send(m_fd, data + off, len - off, MSG_NOSIGNAL);
+            ssize_t n;
+            if (m_ssl)
+            {
+                n = SSL_write(m_ssl, data + off, static_cast<int>(len - off));
+            }
+            else
+            {
+                n = ::send(m_fd, data + off, len - off, MSG_NOSIGNAL);
+            }
             if (n <= 0)
             {
                 return false;
@@ -122,7 +196,14 @@ namespace minerva
 
     void http_client::shutdown_write()
     {
-        if (m_fd >= 0)
+        // For TLS there is no half-close primitive; a full close_notify would
+        // tear down the session, so send it via SSL_shutdown. For plain TCP we
+        // half-close the write side so the peer observes EOF.
+        if (m_ssl)
+        {
+            SSL_shutdown(m_ssl);
+        }
+        else if (m_fd >= 0)
         {
             ::shutdown(m_fd, SHUT_WR);
         }
@@ -131,7 +212,15 @@ namespace minerva
     bool http_client::recv_more()
     {
         char buf[16384];
-        ssize_t n = ::recv(m_fd, buf, sizeof(buf), 0);
+        ssize_t n;
+        if (m_ssl)
+        {
+            n = SSL_read(m_ssl, buf, sizeof(buf));
+        }
+        else
+        {
+            n = ::recv(m_fd, buf, sizeof(buf), 0);
+        }
         if (n <= 0)
         {
             return false;

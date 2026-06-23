@@ -1,6 +1,8 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <jsoncpp/json/config.h>
 #include <poll.h>
 #include <unistd.h>
@@ -249,6 +251,23 @@ namespace minerva
             return false;
         }
         sock = s;
+        return true;
+    }
+
+    bool connection::no_delay(bool enable)
+    {
+        // Disable Nagle on the connection.  Responses are often emitted as
+        // several small writes (status line, headers, then body, and for TLS
+        // each becomes a separate record/segment).  With Nagle enabled the
+        // trailing small segment is withheld until the peer ACKs the first,
+        // and the peer's delayed-ACK timer (~40ms) fires first, adding ~40ms
+        // of latency to every response.
+        int on = enable;
+        if (setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)))
+        {
+            LOG_DEBUG_ERRNO("setsockopt TCP_NODELAY failed", errno);
+            return false;
+        }
         return true;
     }
 

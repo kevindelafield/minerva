@@ -339,5 +339,13 @@ namespace minerva
         last_write = std::chrono::steady_clock::now();
         return CONNECTION_STATUS::CONNECTION_OK;
     }
+
+    bool ssl_connection::pending() const
+    {
+        // SSL_pending reports plaintext already decrypted and buffered inside
+        // OpenSSL.  Such data will not make the socket fd readable, so callers
+        // must read it instead of waiting on poll().
+        return m_ssl && SSL_pending(m_ssl) > 0;
+    }
 }
 

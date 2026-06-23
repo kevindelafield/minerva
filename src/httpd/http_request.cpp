@@ -1373,6 +1373,18 @@ namespace minerva
                 bool read_flag = reading;
                 bool write_flag = !reading;
                 bool error_flag = true;
+
+                // For a read, if the connection already has decrypted data
+                // buffered (e.g. OpenSSL read a whole TLS record but we only
+                // consumed part of it), that data will never make the socket
+                // readable.  Skip poll() and read it directly; otherwise we
+                // would block for the full poll timeout on every record tail.
+                if (reading && m_ctx.conn()->pending())
+                {
+                    done = true;
+                    continue;
+                }
+
                 int poll_status = 
                     m_ctx.conn()->poll(read_flag, write_flag, error_flag, 100);
                 if (poll_status < 0)

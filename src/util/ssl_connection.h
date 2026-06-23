@@ -35,6 +35,8 @@ namespace minerva
 
         CONNECTION_STATUS write(const char* buf, size_t length, ssize_t & written) override;
 
+        bool pending() const override;
+
     private:
         static SSL_CTX *m_ssl_ctx;
         SSL *m_ssl;

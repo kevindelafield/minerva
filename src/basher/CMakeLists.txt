@@ -8,4 +8,4 @@ FILE (GLOB APP_SRC "*.cpp")
 
 add_executable(basher ${APP_SRC} ${APP_INCLUDE})
 
-target_link_libraries(basher pthread stdc++ rt)
+target_link_libraries(basher pthread stdc++ rt ${SSL_LIBRARY} ${CRYPTO_LIBRARY})
