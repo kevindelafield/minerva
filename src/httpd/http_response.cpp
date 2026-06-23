@@ -244,7 +244,7 @@ namespace minerva
             return false;
         }
 
-        LOG_DEBUG("sending HTTP response header: " << os.str());
+        LOG_DEBUG("sending HTTP response header");
 
         return send_buffer(os);
     }
