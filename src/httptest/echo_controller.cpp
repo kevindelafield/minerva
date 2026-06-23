@@ -1,0 +1,148 @@
+#include <cstdint>
+#include <cstdlib>
+#include <string>
+#include <istream>
+#include <iterator>
+
+#include <util/string_utils.h>
+#include <util/log.h>
+#include <httpd/http_request.h>
+#include <httpd/http_response.h>
+
+#include "echo_controller.h"
+#include "test_payload.h"
+
+namespace minerva
+{
+
+    static constexpr int BODY_TIMEOUT_MS = 30000;
+    static constexpr size_t STREAM_CHUNK = 8 * 1024;
+
+    echo_controller::echo_controller()
+    {
+        // No authentication for the test service.
+        require_authorization(false);
+
+        REGISTER_HANDLER("echo", echo_controller::handle_echo);
+        REGISTER_HANDLER("checksum", echo_controller::handle_checksum);
+        REGISTER_HANDLER("sink", echo_controller::handle_sink);
+        REGISTER_HANDLER("stream", echo_controller::handle_stream);
+    }
+
+    void echo_controller::handle_echo(http_context & ctx)
+    {
+        // Read the full body. The server decodes chunked vs content-length
+        // transparently, so we just consume whatever is delivered.
+        std::istream & is = ctx.request().read_fully(BODY_TIMEOUT_MS);
+        std::string body((std::istreambuf_iterator<char>(is)),
+                         std::istreambuf_iterator<char>());
+
+        // Decide response framing. Default mirrors the request framing.
+        std::string mode = ctx.request().query_parameter("mode");
+        bool chunked;
+        if (ci_equals(mode, "chunked"))
+        {
+            chunked = true;
+        }
+        else if (ci_equals(mode, "cl"))
+        {
+            chunked = false;
+        }
+        else
+        {
+            chunked = ctx.request().chunked();
+        }
+
+        ctx.response().status_code_success();
+        ctx.response().content_type_octet_stream();
+
+        if (chunked)
+        {
+            // Emit the body as one or more chunks. The server sends the final
+            // zero length chunk after the handler returns.
+            size_t off = 0;
+            do
+            {
+                size_t n = std::min(STREAM_CHUNK, body.size() - off);
+                ctx.response().response_stream().write(body.data() + off, n);
+                ctx.response().flush();
+                off += n;
+            } while (off < body.size());
+        }
+        else
+        {
+            ctx.response().response_stream().write(body.data(), body.size());
+        }
+    }
+
+    void echo_controller::handle_checksum(http_context & ctx)
+    {
+        // Read the body in byte-array passes to exercise the streaming read path.
+        char buf[64 * 1024];
+        uint64_t h = 1469598103934665603ULL;
+        uint64_t total = 0;
+        size_t n;
+        while ((n = ctx.request().read(buf, sizeof(buf), BODY_TIMEOUT_MS)) > 0)
+        {
+            for (size_t i = 0; i < n; ++i)
+            {
+                h ^= static_cast<unsigned char>(buf[i]);
+                h *= 1099511628211ULL;
+            }
+            total += n;
+        }
+
+        ctx.response().status_code_success();
+        ctx.response().content_type_json();
+        ctx.response().response_stream()
+            << "{\"length\":" << total << ",\"checksum\":" << h << "}";
+    }
+
+    void echo_controller::handle_sink(http_context & ctx)
+    {
+        // The body is consumed by the server after the handler returns (httpd
+        // performs a null_body_read), so we simply report no content here.
+        ctx.response().status_code_no_content();
+    }
+
+    void echo_controller::handle_stream(http_context & ctx)
+    {
+        // Any request body is consumed by the server after the handler returns.
+        size_t size = 1024;
+        uint32_t seed = 0;
+        std::string size_s = ctx.request().query_parameter("size");
+        if (!size_s.empty())
+        {
+            size = static_cast<size_t>(std::strtoull(size_s.c_str(), nullptr, 10));
+        }
+        std::string seed_s = ctx.request().query_parameter("seed");
+        if (!seed_s.empty())
+        {
+            seed = static_cast<uint32_t>(std::strtoul(seed_s.c_str(), nullptr, 10));
+        }
+
+        std::string mode = ctx.request().query_parameter("mode");
+        bool chunked = ci_equals(mode, "chunked");
+
+        ctx.response().status_code_success();
+        ctx.response().content_type_octet_stream();
+
+        std::string body = test_payload::generate(seed, size);
+
+        if (chunked)
+        {
+            size_t off = 0;
+            do
+            {
+                size_t n = std::min(STREAM_CHUNK, body.size() - off);
+                ctx.response().response_stream().write(body.data() + off, n);
+                ctx.response().flush();
+                off += n;
+            } while (off < body.size());
+        }
+        else
+        {
+            ctx.response().response_stream().write(body.data(), body.size());
+        }
+    }
+}

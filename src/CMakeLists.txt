@@ -68,4 +68,8 @@ add_subdirectory(www)
 
 add_subdirectory(test)
 
+add_subdirectory(httptest)
+
+add_subdirectory(basher)
+
 
