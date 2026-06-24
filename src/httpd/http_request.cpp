@@ -2,6 +2,7 @@
 #include <iterator>
 #include <regex>
 #include <cassert>
+#include <algorithm>
 #include <curl/curl.h>
 #include <util/connection.h>
 #include <util/log.h>
@@ -29,6 +30,15 @@ namespace minerva
     static const size_t MAX_URI_LENGTH = 2048;           // Maximum URI length
     static const size_t MAX_REQUEST_LINE_SIZE = 4096;    // Maximum request line size
     static const size_t MAX_TOTAL_HEADERS_SIZE = 64*1024; // Maximum total header size (64KB)
+
+    // Case-insensitive search for the lowercase 'needle' inside 'hay'.
+    static size_t ci_find_lower(const std::string & hay, const char * needle)
+    {
+        std::string lower(hay);
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        return lower.find(needle);
+    }
 
     // Parse a chunk-size hex string with strict validation and size caps.
     // Throws http_exception on any error.
@@ -383,7 +393,70 @@ namespace minerva
             // for content type - set it here
             else if (minerva::ci_equals(key, content_type))
             {
-                m_content_type = http_content_type::parse(value);
+                // Split the media type from any parameters (e.g.
+                // "multipart/form-data; boundary=----xyz").
+                std::string media = value;
+                std::string params;
+                size_t semi = value.find(';');
+                if (semi != std::string::npos)
+                {
+                    media = value.substr(0, semi);
+                    params = value.substr(semi + 1);
+                }
+                rtrim(media);
+                m_content_type = http_content_type::parse(media);
+
+                if (m_content_type ==
+                    http_content_type::code::CONTENT_TYPE_MULTIPART_FORM)
+                {
+                    // Extract the boundary parameter.
+                    size_t bpos = ci_find_lower(params, "boundary=");
+                    if (bpos == std::string::npos)
+                    {
+                        LOG_WARN("multipart/form-data missing boundary");
+                        return false;
+                    }
+                    std::string b = params.substr(bpos + 9);
+                    // trim leading whitespace
+                    size_t s = 0;
+                    while (s < b.size() && (b[s] == ' ' || b[s] == '\t'))
+                    {
+                        ++s;
+                    }
+                    b = b.substr(s);
+                    if (!b.empty() && b[0] == '"')
+                    {
+                        size_t endq = b.find('"', 1);
+                        if (endq == std::string::npos)
+                        {
+                            LOG_WARN("multipart boundary missing closing quote");
+                            return false;
+                        }
+                        b = b.substr(1, endq - 1);
+                    }
+                    else
+                    {
+                        size_t semi2 = b.find(';');
+                        if (semi2 != std::string::npos)
+                        {
+                            b = b.substr(0, semi2);
+                        }
+                        while (!b.empty() &&
+                               (b.back() == ' ' || b.back() == '\t'))
+                        {
+                            b.pop_back();
+                        }
+                    }
+                    if (b.empty() ||
+                        b.size() > http_request::MAX_BOUNDARY_SIZE)
+                    {
+                        LOG_WARN("invalid multipart boundary length: " <<
+                                 b.size());
+                        return false;
+                    }
+                    m_mp_boundary = b;
+                    m_mp_delim = "\r\n--" + b;
+                }
             }
             // for connection - set it here
             else if (minerva::ci_equals(key, connectionKey))
@@ -842,6 +915,10 @@ namespace minerva
 
     std::istream & http_request::read_fully(int timeoutMs)
     {
+        if (m_multipart_active)
+        {
+            return mp_read_fully(timeoutMs);
+        }
         if (m_partial_read)
         {
             throw http_exception("protocol violation");
@@ -1111,6 +1188,10 @@ namespace minerva
 
     size_t http_request::read(char * buf, size_t len, int timeoutMs)
     {
+        if (m_multipart_active)
+        {
+            return mp_read(buf, len, timeoutMs);
+        }
         if (m_full_read)
         {
             throw http_exception("protocol violation");
@@ -1332,6 +1413,15 @@ namespace minerva
 
     bool http_request::null_body_read(int timeoutMs)
     {
+        // Whatever multipart parsing has occurred, the remaining bytes still
+        // belong to the underlying content-length/chunked body.  Draining the
+        // transport leaves the connection correctly positioned for the next
+        // request, including any unconsumed (or trailing) form data.  The
+        // already-buffered multipart bytes were counted in m_total_read / the
+        // chunk state, so the transport drain math stays correct; just drop the
+        // staging buffer.
+        m_mp_raw.clear();
+
         if (chunked())
         {
             return null_body_read_chunked(timeoutMs);
@@ -1340,6 +1430,341 @@ namespace minerva
         {
             return null_body_read_cl(timeoutMs);
         }
+    }
+
+    // ---- multipart/form-data streaming engine ----
+
+    size_t http_request::read_raw_body(char * buf, size_t len, int timeoutMs)
+    {
+        if (chunked())
+        {
+            return read_chunked(buf, len, timeoutMs);
+        }
+        else
+        {
+            return read_cl(buf, len, timeoutMs);
+        }
+    }
+
+    bool http_request::mp_read_line(std::string & line, int timeoutMs)
+    {
+        line.clear();
+        while (true)
+        {
+            for (size_t i = 0; i + 1 < m_mp_raw.size(); i++)
+            {
+                if (m_mp_raw[i] == '\r' && m_mp_raw[i + 1] == '\n')
+                {
+                    line.assign(m_mp_raw.begin(), m_mp_raw.begin() + i);
+                    m_mp_raw.erase(m_mp_raw.begin(), m_mp_raw.begin() + i + 2);
+                    return true;
+                }
+            }
+            if (m_mp_raw.size() > MAX_HEADER_SIZE)
+            {
+                LOG_WARN("multipart header line too long");
+                throw http_exception("multipart header line too long");
+            }
+            char buf[4096];
+            size_t r = read_raw_body(buf, sizeof(buf), timeoutMs);
+            if (r == 0)
+            {
+                return false;
+            }
+            m_mp_raw.insert(m_mp_raw.end(), buf, buf + r);
+        }
+    }
+
+    size_t http_request::mp_find_delim() const
+    {
+        const std::string & d = m_mp_delim;
+        if (m_mp_raw.size() < d.size())
+        {
+            return m_mp_raw.size() + 1;
+        }
+        size_t limit = m_mp_raw.size() - d.size();
+        for (size_t i = 0; i <= limit; i++)
+        {
+            bool match = true;
+            for (size_t j = 0; j < d.size(); j++)
+            {
+                if (m_mp_raw[i + j] != d[j])
+                {
+                    match = false;
+                    break;
+                }
+            }
+            if (match)
+            {
+                return i;
+            }
+        }
+        return m_mp_raw.size() + 1;
+    }
+
+    void http_request::mp_consume_delimiter(int timeoutMs)
+    {
+        // m_mp_raw begins with the delimiter "\r\n--<boundary>".
+        for (size_t i = 0; i < m_mp_delim.size(); i++)
+        {
+            m_mp_raw.pop_front();
+        }
+        // The remainder of the line is either empty (a normal delimiter) or
+        // "--" (the closing delimiter), optionally followed by whitespace.
+        std::string trailer;
+        if (!mp_read_line(trailer, timeoutMs))
+        {
+            LOG_WARN("malformed multipart: truncated boundary line");
+            throw http_exception("malformed multipart boundary");
+        }
+        bool closing = trailer.size() >= 2 && trailer[0] == '-' &&
+            trailer[1] == '-';
+        if (closing)
+        {
+            m_mp_state = MP_STATE::MP_DONE;
+        }
+        else
+        {
+            m_mp_state = MP_STATE::MP_HEADERS;
+        }
+    }
+
+    size_t http_request::mp_body_read(char * out, size_t maxlen, bool discard,
+                                      int timeoutMs)
+    {
+        if (m_mp_state != MP_STATE::MP_BODY)
+        {
+            return 0;
+        }
+
+        const size_t D = m_mp_delim.size();
+
+        while (true)
+        {
+            size_t pos = mp_find_delim();
+            if (pos > m_mp_raw.size())
+            {
+                // No delimiter found yet.  Emit everything except the last
+                // (D-1) bytes, which could be the start of a delimiter.
+                size_t avail = m_mp_raw.size();
+                size_t safe = avail >= (D - 1) ? avail - (D - 1) : 0;
+                if (safe > 0)
+                {
+                    size_t n = std::min(maxlen, safe);
+                    if (!discard)
+                    {
+                        std::copy(m_mp_raw.begin(), m_mp_raw.begin() + n, out);
+                    }
+                    m_mp_raw.erase(m_mp_raw.begin(), m_mp_raw.begin() + n);
+                    return n;
+                }
+                char buf[16 * 1024];
+                size_t r = read_raw_body(buf, sizeof(buf), timeoutMs);
+                if (r == 0)
+                {
+                    LOG_WARN("malformed multipart: missing closing boundary");
+                    throw http_exception("malformed multipart body");
+                }
+                m_mp_raw.insert(m_mp_raw.end(), buf, buf + r);
+                continue;
+            }
+
+            if (pos > 0)
+            {
+                size_t n = std::min(maxlen, pos);
+                if (!discard)
+                {
+                    std::copy(m_mp_raw.begin(), m_mp_raw.begin() + n, out);
+                }
+                m_mp_raw.erase(m_mp_raw.begin(), m_mp_raw.begin() + n);
+                return n;
+            }
+
+            // pos == 0: delimiter is at the front; consume it and stop.
+            mp_consume_delimiter(timeoutMs);
+            return 0;
+        }
+    }
+
+    void http_request::mp_init_first_boundary(int timeoutMs)
+    {
+        // Skip any preamble and locate the opening boundary line, which is
+        // "--<boundary>" with no leading CRLF.
+        while (true)
+        {
+            std::string line;
+            if (!mp_read_line(line, timeoutMs))
+            {
+                LOG_WARN("malformed multipart: no opening boundary");
+                throw http_exception("malformed multipart boundary");
+            }
+            if (line.size() >= 2 + m_mp_boundary.size() &&
+                line.compare(0, 2, "--") == 0 &&
+                line.compare(2, m_mp_boundary.size(), m_mp_boundary) == 0)
+            {
+                std::string rest = line.substr(2 + m_mp_boundary.size());
+                bool closing = rest.size() >= 2 && rest[0] == '-' &&
+                    rest[1] == '-';
+                m_mp_state = closing ? MP_STATE::MP_DONE : MP_STATE::MP_HEADERS;
+                return;
+            }
+            // Otherwise this is a preamble line; ignore it.
+        }
+    }
+
+    std::string http_request::mp_extract_param(const std::string & value,
+                                               const char * key)
+    {
+        std::string lower(value);
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        std::string k(key);
+        k += "=";
+        size_t p = lower.find(k);
+        while (p != std::string::npos)
+        {
+            // Ensure the match is at a parameter boundary so that "name" does
+            // not match inside "filename".
+            char before = (p == 0) ? ';' : lower[p - 1];
+            if (before == ';' || before == ' ' || before == '\t')
+            {
+                std::string rest = value.substr(p + k.size());
+                size_t s = 0;
+                while (s < rest.size() && (rest[s] == ' ' || rest[s] == '\t'))
+                {
+                    ++s;
+                }
+                rest = rest.substr(s);
+                if (!rest.empty() && rest[0] == '"')
+                {
+                    size_t e = rest.find('"', 1);
+                    if (e != std::string::npos)
+                    {
+                        return rest.substr(1, e - 1);
+                    }
+                    return rest.substr(1);
+                }
+                size_t e = rest.find_first_of("; \t");
+                if (e != std::string::npos)
+                {
+                    return rest.substr(0, e);
+                }
+                return rest;
+            }
+            p = lower.find(k, p + 1);
+        }
+        return std::string();
+    }
+
+    void http_request::mp_parse_part_headers(form_part & part, int timeoutMs)
+    {
+        part.name.clear();
+        part.filename.clear();
+        part.content_type.clear();
+
+        while (true)
+        {
+            std::string line;
+            if (!mp_read_line(line, timeoutMs))
+            {
+                LOG_WARN("malformed multipart: truncated part headers");
+                throw http_exception("malformed multipart headers");
+            }
+            if (line.empty())
+            {
+                break; // end of this part's headers
+            }
+            size_t colon = line.find(':');
+            if (colon == std::string::npos)
+            {
+                LOG_WARN("malformed multipart part header: " << line);
+                throw http_exception("malformed multipart header");
+            }
+            std::string hkey = line.substr(0, colon);
+            rtrim(hkey);
+            std::string hval = line.substr(colon + 1);
+            size_t s = 0;
+            while (s < hval.size() && (hval[s] == ' ' || hval[s] == '\t'))
+            {
+                ++s;
+            }
+            hval = hval.substr(s);
+
+            if (minerva::ci_equals(hkey, "content-disposition"))
+            {
+                part.name = mp_extract_param(hval, "name");
+                part.filename = mp_extract_param(hval, "filename");
+            }
+            else if (minerva::ci_equals(hkey, "content-type"))
+            {
+                part.content_type = hval;
+            }
+        }
+        m_mp_state = MP_STATE::MP_BODY;
+    }
+
+    bool http_request::next_form(form_part & part, int timeoutMs)
+    {
+        if (!is_multipart_form())
+        {
+            throw http_exception("not a multipart form request");
+        }
+        if (m_mp_boundary.empty())
+        {
+            throw http_exception("missing multipart boundary");
+        }
+        if (!m_multipart_active && (m_full_read || m_partial_read))
+        {
+            // The body was already consumed by a raw read.
+            throw http_exception("protocol violation");
+        }
+
+        m_multipart_active = true;
+
+        // Drain any unread bytes from the current part.
+        if (m_mp_state == MP_STATE::MP_BODY)
+        {
+            char buf[16 * 1024];
+            while (mp_body_read(buf, sizeof(buf), true, timeoutMs) > 0)
+            {
+            }
+        }
+
+        // Position at the first boundary on the very first call.
+        if (m_mp_state == MP_STATE::MP_INIT)
+        {
+            mp_init_first_boundary(timeoutMs);
+        }
+
+        if (m_mp_state == MP_STATE::MP_DONE)
+        {
+            return false;
+        }
+
+        // m_mp_state == MP_HEADERS
+        mp_parse_part_headers(part, timeoutMs);
+        return true;
+    }
+
+    std::istream & http_request::mp_read_fully(int timeoutMs)
+    {
+        m_fullbuf.emplace(); // fresh buffer for the current part
+        char buf[16 * 1024];
+        size_t n;
+        while ((n = mp_body_read(buf, sizeof(buf), false, timeoutMs)) > 0)
+        {
+            m_fullbuf->write(buf, n);
+        }
+        return *m_fullbuf;
+    }
+
+    size_t http_request::mp_read(char * buf, size_t len, int timeoutMs)
+    {
+        if (m_mp_state != MP_STATE::MP_BODY)
+        {
+            return 0;
+        }
+        return mp_body_read(buf, len, false, timeoutMs);
     }
 
     size_t http_request::read_from_socket(char * buf, size_t len,

@@ -18,6 +18,24 @@ namespace minerva
     static constexpr int BODY_TIMEOUT_MS = 30000;
     static constexpr size_t STREAM_CHUNK = 8 * 1024;
 
+    // Incremental FNV-1a so streamed and buffered reads produce the same hash.
+    static inline void fnv_update(uint64_t & h, const char * data, size_t len)
+    {
+        for (size_t i = 0; i < len; ++i)
+        {
+            h ^= static_cast<unsigned char>(data[i]);
+            h *= 1099511628211ULL;
+        }
+    }
+
+    // Fold a string followed by a NUL separator so field boundaries matter.
+    static inline void fnv_update_field(uint64_t & h, const std::string & s)
+    {
+        fnv_update(h, s.data(), s.size());
+        char z = 0;
+        fnv_update(h, &z, 1);
+    }
+
     echo_controller::echo_controller()
     {
         // No authentication for the test service.
@@ -27,6 +45,7 @@ namespace minerva
         REGISTER_HANDLER("checksum", echo_controller::handle_checksum);
         REGISTER_HANDLER("sink", echo_controller::handle_sink);
         REGISTER_HANDLER("stream", echo_controller::handle_stream);
+        REGISTER_HANDLER("form", echo_controller::handle_form);
     }
 
     void echo_controller::handle_echo(http_context & ctx)
@@ -144,5 +163,73 @@ namespace minerva
         {
             ctx.response().response_stream().write(body.data(), body.size());
         }
+    }
+
+    void echo_controller::handle_form(http_context & ctx)
+    {
+        http_request & req = ctx.request();
+        if (!req.is_multipart_form())
+        {
+            ctx.response().status_code_bad_request();
+            return;
+        }
+
+        // Selects how each part body is consumed.
+        std::string mode = req.query_parameter("read");
+        if (mode.empty())
+        {
+            mode = "full";
+        }
+        bool stream = ci_equals(mode, "stream");
+        bool partial = ci_equals(mode, "partial");
+
+        // Single combined FNV-1a folding each part's metadata and body so the
+        // client can verify the whole traversal with one number.
+        uint64_t h = 1469598103934665603ULL;
+        uint64_t total = 0;
+        uint64_t count = 0;
+
+        http_request::form_part part;
+        while (req.next_form(part, BODY_TIMEOUT_MS))
+        {
+            ++count;
+            fnv_update_field(h, part.name);
+            fnv_update_field(h, part.filename);
+            fnv_update_field(h, part.content_type);
+
+            if (stream || partial)
+            {
+                char buf[STREAM_CHUNK];
+                size_t n;
+                while ((n = req.read(buf, sizeof(buf), BODY_TIMEOUT_MS)) > 0)
+                {
+                    fnv_update(h, buf, n);
+                    total += n;
+                }
+            }
+            else
+            {
+                std::istream & is = req.read_fully(BODY_TIMEOUT_MS);
+                std::string body((std::istreambuf_iterator<char>(is)),
+                                 std::istreambuf_iterator<char>());
+                fnv_update(h, body.data(), body.size());
+                total += body.size();
+            }
+            char z = 0;
+            fnv_update(h, &z, 1); // body terminator
+
+            if (partial)
+            {
+                // Stop after the first part; the server drains the remaining
+                // form data via null_body_read after the handler returns.
+                break;
+            }
+        }
+
+        ctx.response().status_code_success();
+        ctx.response().content_type_json();
+        ctx.response().response_stream()
+            << "{\"count\":" << count << ",\"length\":" << total
+            << ",\"checksum\":" << h << "}";
     }
 }

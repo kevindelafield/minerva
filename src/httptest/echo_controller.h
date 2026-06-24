@@ -20,6 +20,14 @@ namespace minerva
     //   /echo/stream    - generate a deterministic body of ?size= bytes seeded
     //                     by ?seed= and return it, chunked or content-length
     //                     based on ?mode=.
+    //   /echo/form      - parse a multipart/form-data request. The ?read=
+    //                     query parameter selects how each part body is
+    //                     consumed: full (read_fully), stream (read loop) or
+    //                     partial (read only the first part, leaving the rest
+    //                     for the server's null-body drain). Returns a JSON
+    //                     summary with the part count, total body length and a
+    //                     combined FNV-1a checksum folding part metadata and
+    //                     bodies.
     class echo_controller : public controller
     {
     public:
@@ -31,5 +39,6 @@ namespace minerva
         void handle_checksum(http_context & ctx);
         void handle_sink(http_context & ctx);
         void handle_stream(http_context & ctx);
+        void handle_form(http_context & ctx);
     };
 }

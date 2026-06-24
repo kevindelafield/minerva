@@ -20,7 +20,7 @@ namespace minerva
     // needed to verify the response.
     struct request_spec
     {
-        enum kind { ECHO, CHECKSUM, SINK, STREAM, RAW, FAULT };
+        enum kind { ECHO, CHECKSUM, SINK, STREAM, RAW, MULTIPART, FAULT };
 
         kind k = ECHO;
         std::string raw_request;   // bytes to send on the wire
@@ -39,6 +39,11 @@ namespace minerva
         bool check_checksum = false;
         uint64_t expected_length = 0;
         uint64_t expected_checksum = 0;
+
+        // Multipart verification: the server returns count/length/checksum
+        // describing the parts it consumed.
+        bool check_multipart = false;
+        uint64_t expected_count = 0;
     };
 
     class request_gen

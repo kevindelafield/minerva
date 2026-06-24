@@ -182,6 +182,41 @@ namespace minerva
             return m_chunked;
         }
 
+        // Maximum length accepted for a multipart boundary token.
+        static constexpr size_t MAX_BOUNDARY_SIZE = 256;
+
+        // Metadata describing a single part of a multipart/form-data request.
+        // Populated by next_form().
+        struct form_part
+        {
+            std::string name;          // the form field name
+            std::string filename;      // file name for file uploads (may be empty)
+            std::string content_type;  // the part's Content-Type (may be empty)
+        };
+
+        // True when the request carried a multipart/form-data Content-Type with
+        // a valid boundary.
+        bool is_multipart_form() const
+        {
+            return m_content_type ==
+                http_content_type::code::CONTENT_TYPE_MULTIPART_FORM;
+        }
+
+        // The boundary token extracted from the multipart/form-data header.
+        const std::string & multipart_boundary() const
+        {
+            return m_mp_boundary;
+        }
+
+        // Advance to the next part of a multipart/form-data request.  Returns
+        // true and fills 'part' with the part metadata when a part is
+        // available; returns false once the closing boundary is reached.  Any
+        // unread bytes from the previous part are drained automatically.  After
+        // a successful call the part body is read with read()/read_fully(),
+        // which then operate on the current part only.  Throws http_exception
+        // on a malformed stream.
+        bool next_form(form_part & part, int timeoutMs = 0);
+
     private:
 
         enum CHUNK_STATE
@@ -220,6 +255,51 @@ namespace minerva
                                 minerva::timer & timer,
                                 int timeoutMs);
 
+        // ---- multipart/form-data streaming engine ----
+
+        enum MP_STATE
+        {
+            MP_INIT,     // before the opening boundary
+            MP_HEADERS,  // positioned at a part's headers
+            MP_BODY,     // a part body is available to read
+            MP_DONE      // closing boundary consumed
+        };
+
+        // Pull up to len decoded body bytes from the transport (content-length
+        // or chunked), returning 0 at end of body.
+        size_t read_raw_body(char * buf, size_t len, int timeoutMs);
+
+        // Read a single CRLF-terminated line from the decoded body into 'line'
+        // (without the trailing CRLF).  Returns false at end of body.
+        bool mp_read_line(std::string & line, int timeoutMs);
+
+        // Locate the boundary delimiter ("\r\n--<boundary>") in m_mp_raw.
+        // Returns the offset or m_mp_raw.size()+1 when not found.
+        size_t mp_find_delim() const;
+
+        // Consume the boundary delimiter at the front of m_mp_raw and move to
+        // MP_HEADERS or MP_DONE.
+        void mp_consume_delimiter(int timeoutMs);
+
+        // Deliver (or discard) current part body bytes up to the delimiter.
+        // Returns 0 when the current part is exhausted.
+        size_t mp_body_read(char * out, size_t maxlen, bool discard,
+                            int timeoutMs);
+
+        // Skip the opening boundary (and any preamble) for the first part.
+        void mp_init_first_boundary(int timeoutMs);
+
+        // Parse the headers of the current part into 'part'.
+        void mp_parse_part_headers(form_part & part, int timeoutMs);
+
+        // Per-part read_fully / read used when multipart traversal is active.
+        std::istream & mp_read_fully(int timeoutMs);
+        size_t mp_read(char * buf, size_t len, int timeoutMs);
+
+        // Extract a parameter value (e.g. name, filename) from a header value.
+        static std::string mp_extract_param(const std::string & value,
+                                            const char * key);
+
         bool                                                 m_chunked       = false;
         bool                                                 m_full_read     = false;
         bool                                                 m_partial_read  = false;
@@ -239,5 +319,12 @@ namespace minerva
         bool                                                 m_keep_alive    = true;
         bool                                                 m_continue_100  = false;
         size_t                                               m_max_content_length{MAX_CONTENT_LENGTH};
+
+        // multipart/form-data parsing state
+        std::string                                          m_mp_boundary;
+        std::string                                          m_mp_delim;
+        std::deque<char>                                     m_mp_raw;
+        MP_STATE                                             m_mp_state          = MP_STATE::MP_INIT;
+        bool                                                 m_multipart_active  = false;
     };
 }
