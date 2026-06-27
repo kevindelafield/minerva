@@ -46,6 +46,7 @@ namespace minerva
         REGISTER_HANDLER("sink", echo_controller::handle_sink);
         REGISTER_HANDLER("stream", echo_controller::handle_stream);
         REGISTER_HANDLER("form", echo_controller::handle_form);
+        REGISTER_HANDLER("formgen", echo_controller::handle_formgen);
     }
 
     void echo_controller::handle_echo(http_context & ctx)
@@ -231,5 +232,71 @@ namespace minerva
         ctx.response().response_stream()
             << "{\"count\":" << count << ",\"length\":" << total
             << ",\"checksum\":" << h << "}";
+    }
+
+    void echo_controller::handle_formgen(http_context & ctx)
+    {
+        // Any request body is consumed by the server after the handler returns.
+        // Generate a deterministic multipart/form-data response. The part set
+        // is a pure function of (parts, seed, base size) so a client can
+        // reconstruct and verify the exact bytes given the random boundary.
+        uint32_t parts = 3;
+        uint32_t seed = 0;
+        size_t base = 1000;
+
+        std::string parts_s = ctx.request().query_parameter("parts");
+        if (!parts_s.empty())
+        {
+            parts = static_cast<uint32_t>(std::strtoul(parts_s.c_str(), nullptr, 10));
+        }
+        std::string seed_s = ctx.request().query_parameter("seed");
+        if (!seed_s.empty())
+        {
+            seed = static_cast<uint32_t>(std::strtoul(seed_s.c_str(), nullptr, 10));
+        }
+        std::string size_s = ctx.request().query_parameter("size");
+        if (!size_s.empty())
+        {
+            base = static_cast<size_t>(std::strtoull(size_s.c_str(), nullptr, 10));
+        }
+
+        std::string mode = ctx.request().query_parameter("mode");
+        bool chunked = ci_equals(mode, "chunked");
+
+        ctx.response().status_code_success();
+        ctx.response().begin_multipart();
+
+        for (uint32_t k = 0; k < parts; ++k)
+        {
+            bool is_file = (k % 2 == 1);
+            bool has_ct = is_file || (k % 3 == 0);
+            std::string name = "field" + std::to_string(k);
+            std::string filename = is_file ? ("file" + std::to_string(k) + ".bin")
+                                           : std::string();
+            std::string content_type = has_ct ? std::string("application/octet-stream")
+                                              : std::string();
+            size_t size = base + static_cast<size_t>(k) * 4096;
+            std::string body = test_payload::generate(seed + k, size);
+
+            ctx.response().begin_part(name, filename, content_type);
+
+            if (chunked)
+            {
+                size_t off = 0;
+                do
+                {
+                    size_t n = std::min(STREAM_CHUNK, body.size() - off);
+                    ctx.response().response_stream().write(body.data() + off, n);
+                    ctx.response().flush();
+                    off += n;
+                } while (off < body.size());
+            }
+            else
+            {
+                ctx.response().response_stream().write(body.data(), body.size());
+            }
+        }
+
+        ctx.response().end_multipart();
     }
 }

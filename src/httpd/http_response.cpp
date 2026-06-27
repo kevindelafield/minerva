@@ -3,6 +3,7 @@
 #include "http_context.h"
 #include "http_exception.h"
 #include "http_content_type.h"
+#include <util/guid.h>
 
 namespace minerva
 {
@@ -339,5 +340,70 @@ namespace minerva
             // clear stream
             m_response_stream.str(std::string());
         }
+    }
+
+    const std::string & http_response::begin_multipart()
+    {
+        if (m_multipart_boundary.empty())
+        {
+            m_multipart_boundary = "----------" + new_guid();
+        }
+        content_type_multipart_form();
+        m_part_open = false;
+        return m_multipart_boundary;
+    }
+
+    void http_response::begin_part(const std::string & name,
+                                   const std::string & filename,
+                                   const std::string & content_type)
+    {
+        if (!header_value_safe(name) ||
+            !header_value_safe(filename) ||
+            !header_value_safe(content_type))
+        {
+            throw http_exception("multipart part metadata contains CR/LF/NUL");
+        }
+
+        if (m_part_open)
+        {
+            // terminate the previous part body
+            m_response_stream << CRLF;
+        }
+        m_response_stream << "--" << m_multipart_boundary << CRLF;
+        m_response_stream << "Content-Disposition: form-data; name=\""
+                          << name << "\"";
+        if (!filename.empty())
+        {
+            m_response_stream << "; filename=\"" << filename << "\"";
+        }
+        m_response_stream << CRLF;
+        if (!content_type.empty())
+        {
+            m_response_stream << "Content-Type: " << content_type << CRLF;
+        }
+        m_response_stream << CRLF;
+        m_part_open = true;
+    }
+
+    void http_response::write_part(const std::string & name,
+                                   const std::string & filename,
+                                   const std::string & content_type,
+                                   const char * data, size_t len)
+    {
+        begin_part(name, filename, content_type);
+        if (len > 0)
+        {
+            m_response_stream.write(data, static_cast<std::streamsize>(len));
+        }
+    }
+
+    void http_response::end_multipart()
+    {
+        if (m_part_open)
+        {
+            m_response_stream << CRLF;
+        }
+        m_response_stream << "--" << m_multipart_boundary << "--" << CRLF;
+        m_part_open = false;
     }
 }

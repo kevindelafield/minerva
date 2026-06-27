@@ -254,6 +254,50 @@ namespace minerva
             m_multipart_boundary = boundary;
         }
 
+        // ---- multipart/form-data response generation ----
+        //
+        // Services emit a multipart/form-data response by calling
+        // begin_multipart() once, then begin_part()/write_part() for each
+        // part, and end_multipart() to close. Part bodies may be streamed
+        // directly through response_stream() (with flush() for chunked
+        // framing) after begin_part(); the trailing CRLF that separates a
+        // part body from the next boundary is emitted lazily by the next
+        // begin_part()/end_multipart() call. Content-Length framing buffers
+        // the whole response; chunked framing is selected by calling flush()
+        // between writes exactly as with any other streamed response.
+
+        // Initialise a multipart response: set the Content-Type to
+        // multipart/form-data and generate a random boundary (unless one was
+        // already set via multipart_boundary()). Returns the boundary.
+        const std::string & begin_multipart();
+
+        // Open a new part: emits the boundary delimiter and the part headers
+        // (Content-Disposition with the given name and optional filename, plus
+        // an optional Content-Type) followed by the blank separator line. The
+        // caller then writes the part body via response_stream(). Throws
+        // http_exception if name/filename/content_type contain CR, LF or NUL.
+        void begin_part(const std::string & name,
+                        const std::string & filename = std::string(),
+                        const std::string & content_type = std::string());
+
+        // Convenience: open a part and write its complete body in one call.
+        void write_part(const std::string & name,
+                        const std::string & filename,
+                        const std::string & content_type,
+                        const char * data, size_t len);
+
+        void write_part(const std::string & name,
+                        const std::string & filename,
+                        const std::string & content_type,
+                        const std::string & data)
+        {
+            write_part(name, filename, content_type, data.data(), data.size());
+        }
+
+        // Close the current part (if any) and write the closing boundary
+        // delimiter.
+        void end_multipart();
+
     private:
 
         constexpr static const char * CRLF = "\r\n";
@@ -270,5 +314,6 @@ namespace minerva
         bool                                              m_should_write_header = true;
         bool                                              m_header_written     = false;
         std::string                                       m_multipart_boundary;
+        bool                                              m_part_open          = false;
     };
 }

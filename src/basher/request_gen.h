@@ -20,7 +20,7 @@ namespace minerva
     // needed to verify the response.
     struct request_spec
     {
-        enum kind { ECHO, CHECKSUM, SINK, STREAM, RAW, MULTIPART, FAULT };
+        enum kind { ECHO, CHECKSUM, SINK, STREAM, RAW, MULTIPART, FORMGEN, FAULT };
 
         kind k = ECHO;
         std::string raw_request;   // bytes to send on the wire
@@ -44,6 +44,15 @@ namespace minerva
         // describing the parts it consumed.
         bool check_multipart = false;
         uint64_t expected_count = 0;
+
+        // Multipart response verification (/echo/formgen): the server returns a
+        // multipart/form-data body with a random boundary. We reconstruct the
+        // expected bytes from these deterministic parameters once the response
+        // boundary is known.
+        bool check_formgen = false;
+        uint32_t fg_parts = 0;
+        uint32_t fg_seed = 0;
+        uint32_t fg_base = 0;
     };
 
     class request_gen

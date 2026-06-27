@@ -28,6 +28,11 @@ namespace minerva
     //                     summary with the part count, total body length and a
     //                     combined FNV-1a checksum folding part metadata and
     //                     bodies.
+    //   /echo/formgen   - generate a multipart/form-data response. The
+    //                     ?parts=, ?seed= and ?size= query parameters select a
+    //                     deterministic set of parts (alternating file/field
+    //                     parts with deterministic bodies). ?mode=chunked|cl
+    //                     selects the response framing.
     class echo_controller : public controller
     {
     public:
@@ -40,5 +45,6 @@ namespace minerva
         void handle_sink(http_context & ctx);
         void handle_stream(http_context & ctx);
         void handle_form(http_context & ctx);
+        void handle_formgen(http_context & ctx);
     };
 }

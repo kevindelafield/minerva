@@ -145,7 +145,7 @@ namespace minerva
         spec.close_after = !keep_alive;
 
         // Choose an endpoint.
-        int pick = static_cast<int>(rng() % 7);
+        int pick = static_cast<int>(rng() % 8);
         bool body_chunked = (rng() & 1) != 0;
         const char * resp_modes[] = {"", "?mode=cl", "?mode=chunked"};
         std::string resp_mode = resp_modes[rng() % 3];
@@ -325,6 +325,27 @@ namespace minerva
             spec.expected_checksum = h;
             break;
         }
+        case 6: // GET /echo/formgen, verify generated multipart response
+        {
+            uint32_t parts = 1 + static_cast<uint32_t>(rng() % 5); // 1..5
+            uint32_t seed = static_cast<uint32_t>(rng());
+            uint32_t base = static_cast<uint32_t>(rng() % 4096);
+            bool resp_chunked = (rng() & 1) != 0;
+            std::ostringstream path;
+            path << "/echo/formgen?parts=" << parts << "&seed=" << seed
+                 << "&size=" << base
+                 << "&mode=" << (resp_chunked ? "chunked" : "cl");
+            spec.k = request_spec::FORMGEN;
+            spec.description = "GET /echo/formgen";
+            spec.raw_request = build_request("GET", path.str(), m_cfg.host,
+                                             "", false, false, keep_alive, rng);
+            spec.expected_status = 200;
+            spec.check_formgen = true;
+            spec.fg_parts = parts;
+            spec.fg_seed = seed;
+            spec.fg_base = base;
+            break;
+        }
         default: // DELETE /echo/echo, empty body, expect 200 empty
         {
             spec.k = request_spec::RAW;
@@ -442,6 +463,42 @@ namespace minerva
         return true;
     }
 
+    // Reconstruct the exact multipart/form-data body produced by the
+    // httptest /echo/formgen handler, using the boundary chosen at runtime by
+    // the server. The part definition rule MUST stay in lockstep with
+    // echo_controller::handle_formgen.
+    static std::string fg_reconstruct(uint32_t parts, uint32_t seed,
+                                      uint32_t base, const std::string & boundary)
+    {
+        std::ostringstream wire;
+        for (uint32_t k = 0; k < parts; ++k)
+        {
+            bool is_file = (k % 2 == 1);
+            bool has_ct = is_file || (k % 3 == 0);
+            std::string name = "field" + std::to_string(k);
+
+            wire << "--" << boundary << "\r\n";
+            wire << "Content-Disposition: form-data; name=\"" << name << "\"";
+            if (is_file)
+            {
+                wire << "; filename=\"file" << k << ".bin\"";
+            }
+            wire << "\r\n";
+            if (has_ct)
+            {
+                wire << "Content-Type: application/octet-stream\r\n";
+            }
+            wire << "\r\n";
+
+            size_t size = static_cast<size_t>(base) + static_cast<size_t>(k) * 4096;
+            std::string body = test_payload::generate(seed + k, size);
+            wire.write(body.data(), body.size());
+            wire << "\r\n";
+        }
+        wire << "--" << boundary << "--\r\n";
+        return wire.str();
+    }
+
     bool verify_response(const request_spec & spec,
                          const http_client::response & r)
     {
@@ -489,6 +546,35 @@ namespace minerva
             if (count != spec.expected_count ||
                 len != spec.expected_length ||
                 sum != spec.expected_checksum)
+            {
+                return false;
+            }
+        }
+
+        if (spec.check_formgen)
+        {
+            auto it = r.headers.find("content-type");
+            if (it == r.headers.end())
+            {
+                return false;
+            }
+            const std::string & ct = it->second;
+            size_t bp = ct.find("boundary=");
+            if (bp == std::string::npos)
+            {
+                return false;
+            }
+            std::string boundary = ct.substr(bp + 9); // strlen("boundary=")
+            // Trim any trailing whitespace the parser may have left.
+            while (!boundary.empty() &&
+                   (boundary.back() == ' ' || boundary.back() == '\t' ||
+                    boundary.back() == '\r' || boundary.back() == '\n'))
+            {
+                boundary.pop_back();
+            }
+            std::string expected = fg_reconstruct(spec.fg_parts, spec.fg_seed,
+                                                  spec.fg_base, boundary);
+            if (r.body != expected)
             {
                 return false;
             }
